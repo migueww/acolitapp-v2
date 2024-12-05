@@ -21,6 +21,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter
+} from "@/components/ui/dialog"
+
 
 export default function Home() {
   return (
@@ -39,7 +49,7 @@ export default function Home() {
                   <Label htmlFor="name">Name</Label>
                   <Input id="name" placeholder="Name of your project" />
                 </div>
-                  <Label htmlFor="framework">Framework</Label>
+                <Label htmlFor="framework">Framework</Label>
                 <div className="flex flex-lin space-x-2">
                   <Select>
                     <SelectTrigger id="framework">
@@ -59,7 +69,42 @@ export default function Home() {
           </CardContent>
           <CardFooter className="flex justify-between">
             <Button variant="outline">Cancel</Button>
-            <Button>Deploy</Button>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="outline">Edit Profile</Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>Edit profile</DialogTitle>
+                  <DialogDescription>
+                    Make changes to your profile here. Click save when you are done.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="name" className="text-right">
+                      Name
+                    </Label>
+                    <Input
+                      id="name"
+                      className="col-span-3"
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="username" className="text-right">
+                      Função
+                    </Label>
+                    <Input
+                      id="username"
+                      className="col-span-3"
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button type="submit">Save changes</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </CardFooter>
         </Card>
       </main>
