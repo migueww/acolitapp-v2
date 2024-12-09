@@ -87,7 +87,7 @@ export default function Home() {
             </div>
             <div className="mt-4 text-center text-sm">
               Não tem uma conta?{" "}
-              <Link href="../signup/" className="underline">
+              <Link href="../login/signup" className="underline">
                 Crie uma!
               </Link>
               {data && <p className="mt-4">{data}</p>}
