@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label"
 
 export default function Home() {
   const [data, setData] = React.useState<string | null>(null);
-  const [username, setUsername] = React.useState<string>("");
+  const [email, setEmail] = React.useState<string>("");
   const [password, setPassword] = React.useState<string>("");
 
   const handleClick = async () => {
@@ -28,7 +28,7 @@ export default function Home() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email, password }),
       });
 
       const result = await response.json();
@@ -59,8 +59,8 @@ export default function Home() {
                   type="email"
                   placeholder="carlito.acutis@hotmail.com"
                   required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                 />
               </div>
               <div className="grid gap-2">
