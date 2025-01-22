@@ -16,13 +16,37 @@ export async function POST(req: Request) {
     const user = await db.collection("users").findOne({ email });
 
     if (!user) {
-      return NextResponse.json({ error: "Usuário ou senha incorretos" }, { status: 401 });
+      const response = NextResponse.json(
+        { error: "Usuário ou senha incorretos" },
+        { status: 401 }
+      );
+
+      response.cookies.set("auth-token", "", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 0,
+        path: "/",
+      });
+
+      return response;
     }
 
     const passwordMatch = await bcrypt.compare(password, user.password);
 
     if (!passwordMatch) {
-      return NextResponse.json({ error: "Usuário ou senha incorretos" }, { status: 401 });
+      const response = NextResponse.json(
+        { error: "Usuário ou senha incorretos" },
+        { status: 401 }
+      );
+
+      response.cookies.set("auth-token", "", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 0,
+        path: "/",
+      });
+
+      return response;
     }
 
     const encoder = new TextEncoder();
