@@ -1,11 +1,13 @@
-import mongoose from "mongoose";
+import type { MongooseModule } from "@/lib/mongoose";
 
 declare global {
   // eslint-disable-next-line no-var
   var mongoose:
     | {
-        conn: typeof mongoose | null;
-        promise: Promise<typeof mongoose> | null;
+        conn: MongooseModule | null;
+        promise: Promise<MongooseModule> | null;
       }
     | undefined;
 }
+
+export {};

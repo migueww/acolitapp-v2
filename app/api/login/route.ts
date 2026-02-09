@@ -3,7 +3,7 @@ import bcrypt from "bcrypt";
 import { SignJWT } from "jose";
 
 import dbConnect from "@/lib/db";
-import User from "@/models/User";
+import { getUserModel } from "@/models/User";
 import { resolveJwtSecret } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
 
     await dbConnect();
 
-    const user = await User.findOne({
+    const user = await getUserModel().findOne({
       $or: [{ username: email.toLowerCase() }, { email: email.toLowerCase() }],
     }).lean();
 

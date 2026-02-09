@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcrypt";
 
 import dbConnect from "@/lib/db";
-import User from "@/models/User";
+import { getUserModel } from "@/models/User";
 
 export const runtime = "nodejs";
 
@@ -25,7 +25,7 @@ export async function POST(req: Request) {
     await dbConnect();
 
     const normalizedUsername = email.toLowerCase();
-    const existingUser = await User.findOne({
+    const existingUser = await getUserModel().findOne({
       $or: [{ username: normalizedUsername }, { email: normalizedUsername }],
     }).lean();
 
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    await User.create({
+    await getUserModel().create({
       name,
       username: normalizedUsername,
       passwordHash: hashedPassword,
