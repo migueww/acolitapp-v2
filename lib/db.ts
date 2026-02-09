@@ -11,7 +11,7 @@ type MongooseCache = {
   promise: Promise<typeof mongoose> | null;
 };
 
-const cached = global.mongoose ?? { conn: null, promise: null };
+const cached: MongooseCache = global.mongoose ?? { conn: null, promise: null };
 
 global.mongoose = cached;
 
