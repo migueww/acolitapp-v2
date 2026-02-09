@@ -2,6 +2,22 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+### Requisitos
+
+- Node.js 18+
+- MongoDB em execução localmente ou via Atlas
+
+### Variáveis de ambiente
+
+Crie um arquivo `.env.local` com valores de exemplo (não coloque segredos reais em repositórios públicos):
+
+```bash
+MONGODB_URI="mongodb://localhost:27017/acolitapp-db"
+JWT_SECRET="troque-este-segredo"
+```
+
+### Rodando o projeto
+
 First, run the development server:
 
 ```bash
@@ -17,6 +33,23 @@ bun dev
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+### Endpoints úteis
+
+Login (retorna JWT):
+
+```bash
+curl -X POST http://localhost:3000/api/auth/login \\
+  -H 'Content-Type: application/json' \\
+  -d '{\"username\":\"usuario@exemplo.com\",\"password\":\"senha\"}'
+```
+
+Endpoint protegido (envie o token no Authorization Bearer):
+
+```bash
+curl http://localhost:3000/api/health/protected \\
+  -H 'Authorization: Bearer <SEU_TOKEN>'
+```
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 

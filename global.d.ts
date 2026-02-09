@@ -1,6 +1,13 @@
-import { MongoClient } from "mongodb";
+import type { MongooseModule } from "@/lib/mongoose";
 
 declare global {
-    var _mongoClientPromise: Promise<MongoClient>;
-  }
-  
+  // eslint-disable-next-line no-var
+  var mongoose:
+    | {
+        conn: MongooseModule | null;
+        promise: Promise<MongooseModule> | null;
+      }
+    | undefined;
+}
+
+export {};
