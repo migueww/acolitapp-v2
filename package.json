@@ -30,7 +30,8 @@
     "react": "^18",
     "react-dom": "^18",
     "tailwind-merge": "^2.5.5",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "mongoose": "^8.9.0"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",
