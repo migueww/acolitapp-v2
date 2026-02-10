@@ -27,7 +27,6 @@ export async function GET(req: Request) {
       auth.role === "CERIMONIARIO"
         ? {
             status: { $in: ["SCHEDULED", "OPEN", "PREPARATION"] },
-            $or: [{ createdBy: auth.userId }, { chiefBy: auth.userId }],
           }
         : {
             status: { $in: ["OPEN", "SCHEDULED"] },
@@ -36,7 +35,7 @@ export async function GET(req: Request) {
     const masses = await getMassModel()
       .find(query)
       .sort({ scheduledAt: 1 })
-      .select("_id status scheduledAt chiefBy createdBy")
+      .select("_id status massType scheduledAt chiefBy createdBy")
       .limit(50)
       .lean();
 
@@ -54,6 +53,7 @@ export async function GET(req: Request) {
         item: {
           id: picked._id.toString(),
           status: picked.status,
+          massType: picked.massType,
           scheduledAt: picked.scheduledAt,
           chiefBy: picked.chiefBy.toString(),
           createdBy: picked.createdBy.toString(),

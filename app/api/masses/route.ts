@@ -1,7 +1,7 @@
 import dbConnect from "@/lib/db";
 import { getMongoose } from "@/lib/mongoose";
 import { requireAuth, requireCerimoniario } from "@/lib/auth";
-import { MASS_STATUSES, type MassStatus, getMassModel } from "@/models/Mass";
+import { MASS_STATUSES, MASS_TYPES, type MassStatus, type MassType, getMassModel } from "@/models/Mass";
 import { getUserModel } from "@/models/User";
 import { ApiError, toHttpResponse } from "@/src/server/http/errors";
 import { jsonOk } from "@/src/server/http/response";
@@ -13,6 +13,7 @@ export const runtime = "nodejs";
 const isValidDate = (value: string): boolean => !Number.isNaN(new Date(value).getTime());
 const isMassStatus = (value: unknown): value is MassStatus =>
   typeof value === "string" && MASS_STATUSES.includes(value as MassStatus);
+const isMassType = (value: unknown): value is MassType => typeof value === "string" && MASS_TYPES.includes(value as MassType);
 
 export async function POST(req: Request) {
   const requestId = getRequestId(req);
@@ -23,12 +24,17 @@ export async function POST(req: Request) {
 
     const body = (await req.json()) as {
       scheduledAt?: string;
+      massType?: string;
       chiefBy?: string;
       assignments?: Array<{ roleKey?: unknown; userId?: unknown }>;
     };
 
     if (!body.scheduledAt || !isValidDate(body.scheduledAt)) {
       throw new ApiError({ code: "VALIDATION_ERROR", message: "scheduledAt inválido", status: 400 });
+    }
+
+    if (!isMassType(body.massType)) {
+      throw new ApiError({ code: "VALIDATION_ERROR", message: "massType inválido", status: 400 });
     }
 
     const mongoose = getMongoose();
@@ -77,6 +83,7 @@ export async function POST(req: Request) {
 
     const mass = await getMassModel().create({
       scheduledAt: new Date(body.scheduledAt),
+      massType: body.massType,
       createdBy,
       chiefBy,
       assignments,
@@ -96,13 +103,23 @@ export async function GET(req: Request) {
   const requestId = getRequestId(req);
 
   try {
-    await requireAuth(req);
+    const auth = await requireAuth(req);
     await dbConnect();
+
+    if (auth.role !== "CERIMONIARIO") {
+      throw new ApiError({ code: "FORBIDDEN", message: "Acesso negado", status: 403 });
+    }
 
     const { searchParams } = new URL(req.url);
     const statusParam = searchParams.get("status");
     const fromParam = searchParams.get("from");
     const toParam = searchParams.get("to");
+    const page = Number(searchParams.get("page") || "1");
+    const limit = Math.min(Math.max(Number(searchParams.get("limit") || "20"), 1), 100);
+
+    if (!Number.isInteger(page) || page < 1) {
+      throw new ApiError({ code: "VALIDATION_ERROR", message: "page inválido", status: 400 });
+    }
 
     const filter: {
       status?: MassStatus;
@@ -140,7 +157,9 @@ export async function GET(req: Request) {
     const masses = await getMassModel()
       .find(filter)
       .sort({ scheduledAt: 1 })
-      .select("_id status scheduledAt chiefBy createdBy")
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .select("_id status massType scheduledAt chiefBy createdBy")
       .lean();
 
     return jsonOk(
@@ -148,10 +167,13 @@ export async function GET(req: Request) {
         items: masses.map((mass) => ({
           id: mass._id.toString(),
           status: mass.status,
+          massType: mass.massType,
           scheduledAt: mass.scheduledAt,
           chiefBy: mass.chiefBy?.toString(),
           createdBy: mass.createdBy?.toString(),
         })),
+        page,
+        limit,
       },
       requestId
     );
