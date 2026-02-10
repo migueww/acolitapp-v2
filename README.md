@@ -28,8 +28,6 @@ Aplicação em `http://localhost:3000`.
 
 ## Fluxo de bootstrap (primeiro CERIMONIARIO)
 
-O sistema não permite self-signup público. O primeiro CERIMONIARIO deve ser criado uma única vez via `POST /api/setup` com header `x-setup-token`.
-
 ```bash
 curl -X POST http://localhost:3000/api/setup \
   -H 'Content-Type: application/json' \
@@ -37,18 +35,22 @@ curl -X POST http://localhost:3000/api/setup \
   -d '{"name":"Admin Inicial","username":"admin","password":"SenhaForte123"}'
 ```
 
-Se já existir CERIMONIARIO, a rota retorna `409`.
+## Login
 
-## Login e persistência de sessão
+```bash
+curl -i -c cookie-cer.txt -X POST http://localhost:3000/api/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"SenhaForte123"}'
+```
 
-`POST /api/login` valida credenciais e grava cookie `session` com:
+Resposta de sucesso:
 
-- `httpOnly`
-- `SameSite=Lax`
-- `Path=/`
-- `Secure` em produção
-
-Ao logar com sucesso, a UI redireciona para `/masses`. Ao acessar `/login` já autenticado, há redirecionamento automático para `/masses`.
+```json
+{
+  "ok": true,
+  "token": "<jwt>"
+}
+```
 
 Exemplo de login com persistência de cookie:
 
@@ -69,25 +71,27 @@ Resposta de sucesso (resumo):
 
 ## Endpoints RBAC
 
-### Health protegido (qualquer autenticado)
+### Criar missa (CERIMONIARIO)
 
 ```bash
 curl -i -b cookie.txt http://localhost:3000/api/health/protected
 ```
 
-Com cookie de sessão válido, retorna `200` com `user.id` e `user.role`.
+### Listar missas
 
-### Health admin-only (somente CERIMONIARIO)
+```bash
+curl -i -b cookie-cer.txt 'http://localhost:3000/api/masses?status=SCHEDULED'
+```
+
+### Detalhar missa
 
 ```bash
 curl -i -b cookie.txt http://localhost:3000/api/health/admin
 ```
 
-- `200` para CERIMONIARIO
-- `403` para ACOLITO
-- `401` sem sessão
+## Ações da máquina de estados (etapa 3)
 
-### Criar usuário (somente CERIMONIARIO)
+### Admin actions (CERIMONIARIO + ser `createdBy` ou `chiefBy`; delegação só `createdBy`)
 
 ```bash
 curl -X POST http://localhost:3000/api/users \
@@ -96,7 +100,8 @@ curl -X POST http://localhost:3000/api/users \
   -d '{"name":"Novo Acólito","username":"acolito1","password":"Senha123","role":"ACOLITO"}'
 ```
 
-Essa rota exige sessão válida de CERIMONIARIO.
+# PREPARATION: OPEN -> PREPARATION
+curl -i -X POST -b cookie-cer.txt http://localhost:3000/api/masses/<MASS_ID>/preparation
 
 ## API de Missas (etapa 2)
 
