@@ -52,15 +52,29 @@ Resposta de sucesso:
 }
 ```
 
-## API Missas
+Exemplo de login com persistência de cookie:
+
+```bash
+curl -i -c cookie.txt -X POST http://localhost:3000/api/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"SenhaForte123"}'
+```
+
+Resposta de sucesso (resumo):
+
+```json
+{
+  "ok": true,
+  "token": "<jwt>"
+}
+```
+
+## Endpoints RBAC
 
 ### Criar missa (CERIMONIARIO)
 
 ```bash
-curl -i -X POST http://localhost:3000/api/masses \
-  -H 'Content-Type: application/json' \
-  -b cookie-cer.txt \
-  -d '{"scheduledAt":"2026-02-14T19:00:00.000Z"}'
+curl -i -b cookie.txt http://localhost:3000/api/health/protected
 ```
 
 ### Listar missas
@@ -72,7 +86,7 @@ curl -i -b cookie-cer.txt 'http://localhost:3000/api/masses?status=SCHEDULED'
 ### Detalhar missa
 
 ```bash
-curl -i -b cookie-cer.txt http://localhost:3000/api/masses/<MASS_ID>
+curl -i -b cookie.txt http://localhost:3000/api/health/admin
 ```
 
 ## Ações da máquina de estados (etapa 3)
@@ -80,97 +94,104 @@ curl -i -b cookie-cer.txt http://localhost:3000/api/masses/<MASS_ID>
 ### Admin actions (CERIMONIARIO + ser `createdBy` ou `chiefBy`; delegação só `createdBy`)
 
 ```bash
-# OPEN: SCHEDULED -> OPEN
-curl -i -X POST -b cookie-cer.txt http://localhost:3000/api/masses/<MASS_ID>/open
+curl -X POST http://localhost:3000/api/users \
+  -H 'Content-Type: application/json' \
+  -b cookie.txt \
+  -d '{"name":"Novo Acólito","username":"acolito1","password":"Senha123","role":"ACOLITO"}'
+```
 
 # PREPARATION: OPEN -> PREPARATION
 curl -i -X POST -b cookie-cer.txt http://localhost:3000/api/masses/<MASS_ID>/preparation
 
-# FINISH: PREPARATION -> FINISHED
-curl -i -X POST -b cookie-cer.txt http://localhost:3000/api/masses/<MASS_ID>/finish
+## API de Missas (etapa 2)
 
-# CANCEL: permitido só em SCHEDULED ou OPEN
-curl -i -X POST -b cookie-cer.txt http://localhost:3000/api/masses/<MASS_ID>/cancel
+### Criar missa (somente CERIMONIARIO)
 
-# DELEGATE: somente createdBy
-curl -i -X POST -b cookie-cer.txt http://localhost:3000/api/masses/<MASS_ID>/delegate \
+```bash
+curl -i -X POST http://localhost:3000/api/masses \
   -H 'Content-Type: application/json' \
-  -d '{"newChiefBy":"<USER_ID_CERIMONIARIO>"}'
-
-# ASSIGN-ROLES: permitido somente em PREPARATION
-curl -i -X POST -b cookie-cer.txt http://localhost:3000/api/masses/<MASS_ID>/assign-roles \
-  -H 'Content-Type: application/json' \
+  -b cookie.txt \
   -d '{
-    "assignments": [
-      {"roleKey":"cruciferario", "userId":"<USER_ID_ACOLITO>"},
-      {"roleKey":"microfone", "userId":null}
+    "scheduledAt":"2026-02-14T19:00:00.000Z",
+    "assignments":[
+      {"roleKey":"CRUZ", "userId": null},
+      {"roleKey":"VELA_1", "userId": null}
     ]
   }'
 ```
 
-### Acolito actions (somente ACOLITO)
-
-```bash
-# login do acólito
-curl -i -c cookie-aco.txt -X POST http://localhost:3000/api/login \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"acolito","password":"Senha123"}'
-
-# JOIN: permitido somente em OPEN (idempotente)
-curl -i -X POST -b cookie-aco.txt http://localhost:3000/api/masses/<MASS_ID>/join
-
-# CONFIRM: permitido somente em OPEN (idempotente); auto-join se necessário
-curl -i -X POST -b cookie-aco.txt http://localhost:3000/api/masses/<MASS_ID>/confirm
-```
-
-### Exemplo de resposta de ação bem-sucedida
+Resposta de sucesso:
 
 ```json
 {
-  "ok": true,
-  "mass": {
-    "id": "67aa53c8f93f5fa8d8f64cd2",
-    "status": "OPEN",
-    "attendance": {
-      "joined": [],
-      "confirmed": []
-    },
-    "assignments": [],
-    "events": [
-      {
-        "type": "MASS_OPENED",
-        "actorId": "67aa5000f93f5fa8d8f64ca1",
-        "at": "2026-02-12T20:15:00.000Z",
-        "payload": null
-      }
-    ]
-  }
+  "massId": "67aa53c8f93f5fa8d8f64cd2"
 }
 ```
 
-## Fluxo manual completo (etapa 3)
+### Listar missas (autenticado)
 
-1. Login cerimoniário.
-2. Criar missa.
-3. `POST /open`.
-4. Login acólito.
-5. `POST /join` + `POST /confirm`.
-6. `POST /preparation` (joined não confirmados são removidos).
-7. `POST /assign-roles`.
-8. `POST /finish`.
+```bash
+curl -i -b cookie.txt 'http://localhost:3000/api/masses?status=SCHEDULED&from=2026-02-01T00:00:00.000Z&to=2026-02-28T23:59:59.999Z'
+```
 
-## Política de erros
+Resposta de sucesso:
 
-- `401` não autenticado.
-- `403` autenticado com role incompatível para a ação.
-- `404` missa inexistente **ou** sem vínculo administrativo para aquela missa (política anti-enumeração para ações administrativas).
-- `409` transição de estado inválida.
-- `400` body inválido.
+```json
+{
+  "items": [
+    {
+      "id": "67aa53c8f93f5fa8d8f64cd2",
+      "status": "SCHEDULED",
+      "scheduledAt": "2026-02-14T19:00:00.000Z",
+      "chiefBy": "67aa5000f93f5fa8d8f64ca1",
+      "createdBy": "67aa5000f93f5fa8d8f64ca1"
+    }
+  ]
+}
+```
 
-## Seed opcional
+### Detalhar missa por id (autenticado)
+
+```bash
+curl -i -b cookie.txt http://localhost:3000/api/masses/67aa53c8f93f5fa8d8f64cd2
+```
+
+Resposta de sucesso (resumo):
+
+```json
+{
+  "id": "67aa53c8f93f5fa8d8f64cd2",
+  "status": "SCHEDULED",
+  "scheduledAt": "2026-02-14T19:00:00.000Z",
+  "createdBy": "67aa5000f93f5fa8d8f64ca1",
+  "chiefBy": "67aa5000f93f5fa8d8f64ca1",
+  "attendance": {
+    "joined": [],
+    "confirmed": []
+  },
+  "assignments": [
+    { "roleKey": "CRUZ", "userId": null }
+  ],
+  "events": []
+}
+```
+
+## Seed opcional de missa
 
 ```bash
 npm run seed:mass
 ```
 
-Cria uma missa futura (+2 dias), idempotente por janela de ±5 minutos.
+O comando busca o primeiro `CERIMONIARIO` ativo e cria uma missa para `+2 dias` (arredondada para a hora cheia). É idempotente com tolerância de ±5 minutos no `scheduledAt`.
+
+## Teste manual ponta a ponta (com cookies)
+
+1. Bootstrap do admin em `/api/setup`.
+2. Login do admin em `/api/login` salvando cookie em `cookie.txt`.
+3. Criar uma missa em `/api/masses`.
+4. Listar missas em `/api/masses`.
+5. Ver detalhe em `/api/masses/:id`.
+
+## Decisão sobre signup público
+
+A rota pública de signup (`/api/signup`) foi mantida apenas para compatibilidade e agora retorna `403` com mensagem explícita informando que o cadastro público está desabilitado.
