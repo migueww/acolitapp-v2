@@ -21,6 +21,7 @@ JWT_SECRET="troque-este-segredo"
 First, run the development server:
 
 ```bash
+npm install
 npm run dev
 # or
 yarn dev
@@ -29,6 +30,8 @@ pnpm dev
 # or
 bun dev
 ```
+
+Obs.: este repositório não versiona `package-lock.json`, então use `npm install` para resolver dependências a partir do `package.json`.
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
