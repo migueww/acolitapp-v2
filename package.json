@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "seed:mass": "node scripts/seed-mass.js"
   },
   "dependencies": {
     "@radix-ui/react-context-menu": "^2.2.2",

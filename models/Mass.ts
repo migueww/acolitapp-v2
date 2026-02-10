@@ -1,47 +1,123 @@
-import type { Model } from "mongoose";
+import type { HydratedDocument, Model, Types } from "mongoose";
 
 import { getMongoose } from "@/lib/mongoose";
 
+export const MASS_STATUSES = ["SCHEDULED", "OPEN", "PREPARATION", "FINISHED", "CANCELED"] as const;
+export type MassStatus = (typeof MASS_STATUSES)[number];
+
+export type AttendanceEntry = {
+  userId: Types.ObjectId;
+  joinedAt?: Date;
+  confirmedAt?: Date;
+};
+
+export type AssignmentEntry = {
+  roleKey: string;
+  userId: Types.ObjectId | null;
+};
+
+export type EventEntry = {
+  type: string;
+  actorId: Types.ObjectId;
+  at: Date;
+  payload?: unknown;
+};
+
 export type MassDocument = {
-  _id: string;
-  status: "SCHEDULED" | "OPEN" | "PREPARATION" | "FINISHED" | "CANCELED";
+  _id: Types.ObjectId;
+  status: MassStatus;
   scheduledAt: Date;
-  createdBy?: string;
-  chiefBy?: string;
+  createdBy: Types.ObjectId;
+  chiefBy: Types.ObjectId;
   openedAt?: Date;
   preparationAt?: Date;
   finishedAt?: Date;
   canceledAt?: Date;
+  attendance: {
+    joined: Array<AttendanceEntry>;
+    confirmed: Array<AttendanceEntry>;
+  };
+  assignments: Array<AssignmentEntry>;
+  events: Array<EventEntry>;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
-const buildMassSchema = (mongoose: ReturnType<typeof getMongoose>) =>
-  new mongoose.Schema(
+type MassSchemaType = Omit<MassDocument, "_id">;
+
+const buildMassSchema = (mongoose: ReturnType<typeof getMongoose>) => {
+  const attendanceJoinedSchema = new mongoose.Schema(
+    {
+      userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+      joinedAt: { type: Date, default: Date.now, required: true },
+    },
+    { _id: false }
+  );
+
+  const attendanceConfirmedSchema = new mongoose.Schema(
+    {
+      userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+      confirmedAt: { type: Date, default: Date.now, required: true },
+    },
+    { _id: false }
+  );
+
+  const assignmentSchema = new mongoose.Schema(
+    {
+      roleKey: { type: String, required: true, trim: true },
+      userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    },
+    { _id: false }
+  );
+
+  const eventSchema = new mongoose.Schema(
+    {
+      type: { type: String, required: true, trim: true },
+      actorId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+      at: { type: Date, default: Date.now, required: true },
+      payload: { type: mongoose.Schema.Types.Mixed },
+    },
+    { _id: false }
+  );
+
+  const schema = new mongoose.Schema<MassSchemaType>(
     {
       status: {
         type: String,
-        enum: ["SCHEDULED", "OPEN", "PREPARATION", "FINISHED", "CANCELED"],
+        enum: MASS_STATUSES,
         default: "SCHEDULED",
         required: true,
       },
       scheduledAt: { type: Date, required: true },
-      createdBy: { type: mongoose.Types.ObjectId, ref: "User" },
-      chiefBy: { type: mongoose.Types.ObjectId, ref: "User" },
+      createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+      chiefBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
       openedAt: { type: Date },
       preparationAt: { type: Date },
       finishedAt: { type: Date },
       canceledAt: { type: Date },
+      attendance: {
+        joined: { type: [attendanceJoinedSchema], default: [] },
+        confirmed: { type: [attendanceConfirmedSchema], default: [] },
+      },
+      assignments: { type: [assignmentSchema], default: [] },
+      events: { type: [eventSchema], default: [] },
     },
     { timestamps: true }
   );
 
-export const getMassModel = (): Model<MassDocument> => {
+  schema.index({ status: 1, scheduledAt: 1 });
+  schema.index({ scheduledAt: 1 });
+  schema.index({ createdBy: 1 });
+  schema.index({ chiefBy: 1 });
+
+  return schema;
+};
+
+export type MassModel = Model<MassSchemaType>;
+export type MassHydratedDocument = HydratedDocument<MassSchemaType>;
+
+export const getMassModel = (): MassModel => {
   const mongoose = getMongoose();
-  const existing = mongoose.models.Mass as Model<MassDocument> | undefined;
-
-  if (existing) {
-    return existing;
-  }
-
-  const schema = buildMassSchema(mongoose);
-  return mongoose.model<MassDocument>("Mass", schema);
+  return (mongoose.models.Mass as MassModel | undefined) ||
+    mongoose.model<MassSchemaType>("Mass", buildMassSchema(mongoose));
 };
