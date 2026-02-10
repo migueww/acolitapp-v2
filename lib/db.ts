@@ -28,10 +28,13 @@ export default async function dbConnect(): Promise<MongooseConnection> {
   }
 
   if (!cached.promise) {
-    cached.promise = mongoose.connect(MONGODB_URI_SAFE).catch((error) => {
-      cached.promise = null;
-      throw error;
-    });
+    cached.promise = mongoose
+      .connect(MONGODB_URI_SAFE)
+      .then((mongooseInstance) => mongooseInstance)
+      .catch((error) => {
+        cached.promise = null;
+        throw error;
+      });
   }
 
   cached.conn = await cached.promise;
