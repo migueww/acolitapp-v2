@@ -1,18 +1,6 @@
-export type MongooseModule = {
-  connect: (uri: string) => Promise<MongooseModule>;
-  models: Record<string, unknown>;
-  model: <T = unknown>(name: string, schema: unknown) => T;
-  Schema: new (...args: unknown[]) => unknown;
-  Types: { ObjectId: unknown };
-};
+import mongoose, { type Mongoose } from "mongoose";
 
-let cachedMongoose: MongooseModule | null = null;
+export type MongooseModule = typeof mongoose;
+export type MongooseConnection = Mongoose;
 
-export const getMongoose = (): MongooseModule => {
-  if (!cachedMongoose) {
-    const requireFn = eval("require") as (id: string) => unknown;
-    cachedMongoose = requireFn("mongoose") as MongooseModule;
-  }
-
-  return cachedMongoose;
-};
+export const getMongoose = (): MongooseModule => mongoose;
