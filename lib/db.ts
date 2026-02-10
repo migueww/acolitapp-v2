@@ -1,4 +1,8 @@
-import { getMongoose, type MongooseModule } from "@/lib/mongoose";
+import {
+  getMongoose,
+  type MongooseConnection,
+  type MongooseModule,
+} from "@/lib/mongoose";
 
 const MONGODB_URI = process.env.MONGODB_URI;
 
@@ -9,22 +13,25 @@ if (!MONGODB_URI) {
 const MONGODB_URI_SAFE = MONGODB_URI;
 
 type MongooseCache = {
-  conn: MongooseModule | null;
-  promise: Promise<MongooseModule> | null;
+  conn: MongooseConnection | null;
+  promise: Promise<MongooseConnection> | null;
 };
 
 const cached: MongooseCache = global.mongoose ?? { conn: null, promise: null };
 
 global.mongoose = cached;
 
-export default async function dbConnect(): Promise<MongooseModule> {
-  const mongoose = getMongoose();
+export default async function dbConnect(): Promise<MongooseConnection> {
+  const mongoose: MongooseModule = getMongoose();
   if (cached.conn) {
     return cached.conn;
   }
 
   if (!cached.promise) {
-    cached.promise = mongoose.connect(MONGODB_URI_SAFE).then((mongooseInstance) => mongooseInstance);
+    cached.promise = mongoose.connect(MONGODB_URI_SAFE).catch((error) => {
+      cached.promise = null;
+      throw error;
+    });
   }
 
   cached.conn = await cached.promise;

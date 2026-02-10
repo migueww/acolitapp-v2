@@ -1,3 +1,5 @@
+import type { Model } from "mongoose";
+
 import { getMongoose } from "@/lib/mongoose";
 
 export type MassDocument = {
@@ -32,14 +34,14 @@ const buildMassSchema = (mongoose: ReturnType<typeof getMongoose>) =>
     { timestamps: true }
   );
 
-export const getMassModel = (): Record<string, unknown> => {
+export const getMassModel = (): Model<MassDocument> => {
   const mongoose = getMongoose();
-  const existing = mongoose.models.Mass as Record<string, unknown> | undefined;
+  const existing = mongoose.models.Mass as Model<MassDocument> | undefined;
 
   if (existing) {
     return existing;
   }
 
   const schema = buildMassSchema(mongoose);
-  return mongoose.model<MassDocument>("Mass", schema) as Record<string, unknown>;
+  return mongoose.model<MassDocument>("Mass", schema);
 };
