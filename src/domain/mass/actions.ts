@@ -1,9 +1,10 @@
 import { getMongoose } from "@/lib/mongoose";
 import { getMassModel, type AssignmentEntry, type MassDocument } from "@/models/Mass";
+import { getAssignmentsTemplateByMassType } from "@/src/domain/mass/role-templates";
 
 import { ConflictError, NotFoundError } from "@/src/domain/mass/errors";
 import { assertAcolitoRole, assertCerimoniarioRole } from "@/src/domain/mass/guards";
-import { DEFAULT_ROLE_KEYS, type ActionType, type Actor, type EventPayload, type MassStatus } from "@/src/domain/mass/types";
+import { type ActionType, type Actor, type EventPayload, type MassStatus } from "@/src/domain/mass/types";
 
 type AdminActionInput = {
   massId: string;
@@ -184,7 +185,6 @@ export async function finishMassAction({ massId, actor }: AdminActionInput): Pro
 
   const actorObjectId = toObjectId(actor.userId);
   const massObjectId = toObjectId(massId);
-  const defaultAssignments = DEFAULT_ROLE_KEYS.map((roleKey) => ({ roleKey, userId: null }));
 
   const updated = await getMassModel()
     .findOneAndUpdate(
@@ -202,7 +202,15 @@ export async function finishMassAction({ massId, actor }: AdminActionInput): Pro
               $cond: {
                 if: { $gt: [{ $size: "$assignments" }, 0] },
                 then: "$assignments",
-                else: defaultAssignments,
+                else: {
+                  $switch: {
+                    branches: [
+                      { case: { $eq: ["$massType", "SIMPLES"] }, then: getAssignmentsTemplateByMassType("SIMPLES") },
+                      { case: { $eq: ["$massType", "SOLENE"] }, then: getAssignmentsTemplateByMassType("SOLENE") },
+                    ],
+                    default: getAssignmentsTemplateByMassType("PALAVRA"),
+                  },
+                },
               },
             },
             ...appendEventPipelineStage("MASS_FINISHED", actorObjectId),

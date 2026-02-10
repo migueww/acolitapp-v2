@@ -29,4 +29,3 @@ export type EventInput = {
   payload?: EventPayload;
 };
 
-export const DEFAULT_ROLE_KEYS = ["CRUCIFERARIO", "TURIFERARIO", "NAVETEIRO", "LIVRO", "MICROFONE"] as const;

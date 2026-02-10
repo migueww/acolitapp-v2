@@ -3,6 +3,7 @@ import type { MassDocument } from "@/models/Mass";
 export const serializeMass = (mass: MassDocument) => ({
   id: mass._id.toString(),
   status: mass.status,
+  massType: mass.massType,
   scheduledAt: mass.scheduledAt,
   createdBy: mass.createdBy.toString(),
   chiefBy: mass.chiefBy.toString(),

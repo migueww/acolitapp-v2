@@ -36,6 +36,7 @@ export async function GET(req: Request, context: RouteContext) {
       {
         id: mass._id.toString(),
         status: mass.status,
+        massType: mass.massType,
         scheduledAt: mass.scheduledAt,
         createdBy: mass.createdBy.toString(),
         chiefBy: mass.chiefBy.toString(),

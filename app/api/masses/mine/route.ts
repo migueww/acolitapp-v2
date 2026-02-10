@@ -57,7 +57,7 @@ export async function GET(req: Request) {
     if (auth.role === "CERIMONIARIO") {
       filter.$or = [{ createdBy: auth.userId }, { chiefBy: auth.userId }];
     } else {
-      filter.$or = [{ "attendance.joined.userId": auth.userId }, { "attendance.confirmed.userId": auth.userId }];
+      filter["attendance.confirmed.userId"] = auth.userId;
     }
 
     const skip = (page - 1) * limit;
@@ -67,7 +67,7 @@ export async function GET(req: Request) {
       .sort({ scheduledAt: 1 })
       .skip(skip)
       .limit(limit)
-      .select("_id status scheduledAt chiefBy createdBy")
+      .select("_id status massType scheduledAt chiefBy createdBy")
       .lean();
 
     return jsonOk(
@@ -75,6 +75,7 @@ export async function GET(req: Request) {
         items: masses.map((mass) => ({
           id: mass._id.toString(),
           status: mass.status,
+          massType: mass.massType,
           scheduledAt: mass.scheduledAt,
           chiefBy: mass.chiefBy.toString(),
           createdBy: mass.createdBy.toString(),
