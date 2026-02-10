@@ -1,10 +1,13 @@
-import { NextResponse } from "next/server";
+import { type NextResponse } from "next/server";
 
 import dbConnect from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
-import { type DomainError, toErrorResponse, ValidationError } from "@/src/domain/mass/errors";
 import { serializeMass } from "@/src/domain/mass/serializers";
 import type { MassDocument } from "@/models/Mass";
+import { toHttpResponse, ApiError } from "@/src/server/http/errors";
+import { jsonOk } from "@/src/server/http/response";
+import { getRequestId } from "@/src/server/http/request";
+import { logError, logInfo } from "@/src/server/http/logging";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -17,22 +20,23 @@ export const handleMassAction = async (
   context: RouteContext,
   actionHandler: ActionHandler
 ): Promise<NextResponse> => {
+  const requestId = getRequestId(req);
+
   try {
     const actor = await requireAuth(req);
     await dbConnect();
 
     const { id: massId } = await context.params;
     const mass = await actionHandler({ massId, actor });
+    logInfo(requestId, "Mass action executed", { massId, actorRole: actor.role });
 
-    return NextResponse.json({ ok: true, mass: serializeMass(mass) });
+    return jsonOk({ ok: true, mass: serializeMass(mass) }, requestId);
   } catch (error) {
-    const mapped = toErrorResponse(error as DomainError);
-    if (mapped) {
-      return NextResponse.json({ error: mapped.message }, { status: mapped.status });
+    if (!(error instanceof ApiError) || error.status >= 500) {
+      logError(requestId, "Erro em ação de missa", error);
     }
 
-    console.error("Erro em ação de missa:", error);
-    return NextResponse.json({ error: "Erro no servidor" }, { status: 500 });
+    return toHttpResponse(error, requestId);
   }
 };
 
@@ -40,6 +44,10 @@ export const parseJson = async <T>(req: Request): Promise<T> => {
   try {
     return (await req.json()) as T;
   } catch {
-    throw new ValidationError("JSON inválido");
+    throw new ApiError({
+      code: "VALIDATION_ERROR",
+      message: "JSON inválido",
+      status: 400,
+    });
   }
 };

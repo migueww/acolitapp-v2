@@ -1,6 +1,12 @@
 # Acolitapp v2
 
-Projeto Next.js (App Router) com MongoDB + Mongoose e autenticação baseada em JWT com cookie httpOnly.
+Projeto Next.js (**App Router**) com MongoDB + Mongoose e autenticação JWT (cookie httpOnly ou Authorization header).
+
+## Etapa 4 — robustez operacional
+
+- **Abertura da missa é 100% manual** via `POST /api/masses/:id/open`.
+- **Não existe cron/worker/interval** para auto-abertura.
+- Regra de regressão: qualquer proposta futura de automação temporal deve ser rejeitada nesta etapa.
 
 ## Requisitos
 
@@ -9,24 +15,112 @@ Projeto Next.js (App Router) com MongoDB + Mongoose e autenticação baseada em 
 
 ## Variáveis de ambiente
 
-Crie `.env.local`:
-
 ```bash
 MONGODB_URI="mongodb://localhost:27017/acolitapp-db"
 JWT_SECRET="troque-este-segredo-forte"
 SETUP_TOKEN="token-unico-para-bootstrap"
 ```
 
-## Rodando o projeto
+## Rodando local
 
 ```bash
 npm install
 npm run dev
 ```
 
-Aplicação em `http://localhost:3000`.
+Aplicação: `http://localhost:3000`.
 
-## Fluxo de bootstrap (primeiro CERIMONIARIO)
+## Error shape padrão
+
+Todos os erros de API seguem o formato:
+
+```json
+{
+  "error": {
+    "code": "CONFLICT",
+    "message": "Mass is not OPEN",
+    "requestId": "8f65c818-0e3f-4eac-a774-d31defd18e01"
+  }
+}
+```
+
+Além disso, o header `x-request-id` também é retornado.
+
+## Endpoints operacionais novos
+
+### GET `/api/masses/mine` (auth obrigatório)
+
+Suporta query params: `status`, `from`, `to`, `page`, `limit`.
+
+- CERIMONIARIO: missas onde ele é `createdBy` **ou** `chiefBy`.
+- ACOLITO: missas onde ele está em `attendance.joined` ou `attendance.confirmed`.
+
+Exemplo:
+
+```bash
+curl -i -b cookie.txt 'http://localhost:3000/api/masses/mine?status=OPEN&page=1&limit=20'
+```
+
+### GET `/api/masses/next` (auth obrigatório)
+
+Retorna a próxima missa relevante com payload enxuto:
+
+```json
+{
+  "item": {
+    "id": "67aa53c8f93f5fa8d8f64cd2",
+    "status": "OPEN",
+    "scheduledAt": "2026-02-14T19:00:00.000Z",
+    "chiefBy": "67aa5000f93f5fa8d8f64ca1",
+    "createdBy": "67aa5000f93f5fa8d8f64ca1"
+  }
+}
+```
+
+Exemplo:
+
+```bash
+curl -i -b cookie.txt http://localhost:3000/api/masses/next
+```
+
+## Rate limit de login
+
+`POST /api/login` e `POST /api/auth/login` possuem limite leve:
+
+- **10 tentativas por IP a cada 5 minutos**.
+- Implementação em memória (`Map`) para simplicidade no dev.
+
+Exemplo de resposta 429:
+
+```json
+{
+  "error": {
+    "code": "RATE_LIMITED",
+    "message": "Muitas tentativas de login. Tente novamente em alguns minutos.",
+    "requestId": "2ed8e8d1-9ce1-4124-a85b-54888f2f7ae2",
+    "details": {
+      "resetAt": "2026-03-01T10:15:00.000Z"
+    }
+  }
+}
+```
+
+### Limitação conhecida em produção
+
+Como o limiter é in-memory, ele não é compartilhado entre múltiplas instâncias/processos e pode resetar em restart. Evolução recomendada: usar Redis com janela deslizante/token bucket.
+
+## Segurança (headers)
+
+As respostas passam a incluir:
+
+- `X-Content-Type-Options: nosniff`
+- `Referrer-Policy: no-referrer`
+- `X-Frame-Options: DENY`
+- `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; base-uri 'self';`
+
+## Fluxo mínimo
+
+### 1) Bootstrap do primeiro CERIMONIARIO
 
 ```bash
 curl -X POST http://localhost:3000/api/setup \
@@ -35,24 +129,7 @@ curl -X POST http://localhost:3000/api/setup \
   -d '{"name":"Admin Inicial","username":"admin","password":"SenhaForte123"}'
 ```
 
-## Login
-
-```bash
-curl -i -c cookie-cer.txt -X POST http://localhost:3000/api/login \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"admin","password":"SenhaForte123"}'
-```
-
-Resposta de sucesso:
-
-```json
-{
-  "ok": true,
-  "token": "<jwt>"
-}
-```
-
-Exemplo de login com persistência de cookie:
+### 2) Login
 
 ```bash
 curl -i -c cookie.txt -X POST http://localhost:3000/api/login \
@@ -60,138 +137,33 @@ curl -i -c cookie.txt -X POST http://localhost:3000/api/login \
   -d '{"username":"admin","password":"SenhaForte123"}'
 ```
 
-Resposta de sucesso (resumo):
+## Testes manuais recomendados (curl)
 
-```json
-{
-  "ok": true,
-  "token": "<jwt>"
-}
-```
+1. **Login OK**
+   ```bash
+   curl -i -c cookie.txt -X POST http://localhost:3000/api/login \
+     -H 'Content-Type: application/json' \
+     -d '{"username":"admin","password":"SenhaForte123"}'
+   ```
+2. **Erro de transição + requestId** (ex.: preparação em `SCHEDULED`)
+   ```bash
+   curl -i -b cookie.txt -X POST http://localhost:3000/api/masses/<MASS_ID>/preparation
+   ```
+   Verificar `error.code=CONFLICT`, `error.requestId` e header `x-request-id`.
+3. **Rate limit 429 no login**
+   ```bash
+   for i in {1..12}; do
+     curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:3000/api/login \
+       -H 'Content-Type: application/json' \
+       -d '{"username":"admin","password":"senha-errada"}'
+   done
+   ```
+4. **Operação diária** (`mine` e `next`)
+   ```bash
+   curl -i -b cookie.txt 'http://localhost:3000/api/masses/mine?page=1&limit=10'
+   curl -i -b cookie.txt http://localhost:3000/api/masses/next
+   ```
 
-## Endpoints RBAC
+## Compatibilidade
 
-### Criar missa (CERIMONIARIO)
-
-```bash
-curl -i -b cookie.txt http://localhost:3000/api/health/protected
-```
-
-### Listar missas
-
-```bash
-curl -i -b cookie-cer.txt 'http://localhost:3000/api/masses?status=SCHEDULED'
-```
-
-### Detalhar missa
-
-```bash
-curl -i -b cookie.txt http://localhost:3000/api/health/admin
-```
-
-## Ações da máquina de estados (etapa 3)
-
-### Admin actions (CERIMONIARIO + ser `createdBy` ou `chiefBy`; delegação só `createdBy`)
-
-```bash
-curl -X POST http://localhost:3000/api/users \
-  -H 'Content-Type: application/json' \
-  -b cookie.txt \
-  -d '{"name":"Novo Acólito","username":"acolito1","password":"Senha123","role":"ACOLITO"}'
-```
-
-# PREPARATION: OPEN -> PREPARATION
-curl -i -X POST -b cookie-cer.txt http://localhost:3000/api/masses/<MASS_ID>/preparation
-
-## API de Missas (etapa 2)
-
-### Criar missa (somente CERIMONIARIO)
-
-```bash
-curl -i -X POST http://localhost:3000/api/masses \
-  -H 'Content-Type: application/json' \
-  -b cookie.txt \
-  -d '{
-    "scheduledAt":"2026-02-14T19:00:00.000Z",
-    "assignments":[
-      {"roleKey":"CRUZ", "userId": null},
-      {"roleKey":"VELA_1", "userId": null}
-    ]
-  }'
-```
-
-Resposta de sucesso:
-
-```json
-{
-  "massId": "67aa53c8f93f5fa8d8f64cd2"
-}
-```
-
-### Listar missas (autenticado)
-
-```bash
-curl -i -b cookie.txt 'http://localhost:3000/api/masses?status=SCHEDULED&from=2026-02-01T00:00:00.000Z&to=2026-02-28T23:59:59.999Z'
-```
-
-Resposta de sucesso:
-
-```json
-{
-  "items": [
-    {
-      "id": "67aa53c8f93f5fa8d8f64cd2",
-      "status": "SCHEDULED",
-      "scheduledAt": "2026-02-14T19:00:00.000Z",
-      "chiefBy": "67aa5000f93f5fa8d8f64ca1",
-      "createdBy": "67aa5000f93f5fa8d8f64ca1"
-    }
-  ]
-}
-```
-
-### Detalhar missa por id (autenticado)
-
-```bash
-curl -i -b cookie.txt http://localhost:3000/api/masses/67aa53c8f93f5fa8d8f64cd2
-```
-
-Resposta de sucesso (resumo):
-
-```json
-{
-  "id": "67aa53c8f93f5fa8d8f64cd2",
-  "status": "SCHEDULED",
-  "scheduledAt": "2026-02-14T19:00:00.000Z",
-  "createdBy": "67aa5000f93f5fa8d8f64ca1",
-  "chiefBy": "67aa5000f93f5fa8d8f64ca1",
-  "attendance": {
-    "joined": [],
-    "confirmed": []
-  },
-  "assignments": [
-    { "roleKey": "CRUZ", "userId": null }
-  ],
-  "events": []
-}
-```
-
-## Seed opcional de missa
-
-```bash
-npm run seed:mass
-```
-
-O comando busca o primeiro `CERIMONIARIO` ativo e cria uma missa para `+2 dias` (arredondada para a hora cheia). É idempotente com tolerância de ±5 minutos no `scheduledAt`.
-
-## Teste manual ponta a ponta (com cookies)
-
-1. Bootstrap do admin em `/api/setup`.
-2. Login do admin em `/api/login` salvando cookie em `cookie.txt`.
-3. Criar uma missa em `/api/masses`.
-4. Listar missas em `/api/masses`.
-5. Ver detalhe em `/api/masses/:id`.
-
-## Decisão sobre signup público
-
-A rota pública de signup (`/api/signup`) foi mantida apenas para compatibilidade e agora retorna `403` com mensagem explícita informando que o cadastro público está desabilitado.
+A rota pública de signup (`/api/signup`) foi mantida por compatibilidade e retorna `403`.

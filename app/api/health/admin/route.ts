@@ -1,19 +1,18 @@
-import { NextResponse } from "next/server";
-
 import { requireCerimoniario } from "@/lib/auth";
+import { getRequestId } from "@/src/server/http/request";
+import { jsonOk } from "@/src/server/http/response";
+import { toHttpResponse } from "@/src/server/http/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
+  const requestId = getRequestId(req);
+
   try {
     const user = await requireCerimoniario(req);
-    return NextResponse.json({ ok: true, user: { id: user.userId, role: user.role } });
+    return jsonOk({ ok: true, user: { id: user.userId, role: user.role } }, requestId);
   } catch (error) {
-    if (error instanceof Error && error.message === "Acesso negado") {
-      return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
-    }
-
-    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    return toHttpResponse(error, requestId);
   }
 }

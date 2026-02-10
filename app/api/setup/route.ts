@@ -1,28 +1,34 @@
-import { NextResponse } from "next/server";
 import bcrypt from "bcrypt";
 
 import dbConnect from "@/lib/db";
 import { getUserModel } from "@/models/User";
+import { ApiError, toHttpResponse } from "@/src/server/http/errors";
+import { getRequestId } from "@/src/server/http/request";
+import { jsonOk } from "@/src/server/http/response";
+import { logError } from "@/src/server/http/logging";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
+  const requestId = getRequestId(req);
+
   try {
     const setupToken = req.headers.get("x-setup-token");
     const expectedToken = process.env.SETUP_TOKEN;
 
     if (!expectedToken || setupToken !== expectedToken) {
-      return NextResponse.json({ error: "Setup token inválido" }, { status: 403 });
+      throw new ApiError({ code: "FORBIDDEN", message: "Setup token inválido", status: 403 });
     }
 
     await dbConnect();
 
     const existingCerimoniario = await getUserModel().exists({ role: "CERIMONIARIO" });
     if (existingCerimoniario) {
-      return NextResponse.json(
-        { error: "Bootstrap já concluído. CERIMONIARIO já existe." },
-        { status: 409 }
-      );
+      throw new ApiError({
+        code: "CONFLICT",
+        message: "Bootstrap já concluído. CERIMONIARIO já existe.",
+        status: 409,
+      });
     }
 
     const body = (await req.json()) as { name?: string; username?: string; password?: string };
@@ -31,12 +37,12 @@ export async function POST(req: Request) {
     const password = typeof body.password === "string" ? body.password : "";
 
     if (!name || !username || !password) {
-      return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
+      throw new ApiError({ code: "VALIDATION_ERROR", message: "Dados inválidos", status: 400 });
     }
 
     const existingUsername = await getUserModel().exists({ username });
     if (existingUsername) {
-      return NextResponse.json({ error: "Username já em uso" }, { status: 409 });
+      throw new ApiError({ code: "CONFLICT", message: "Username já em uso", status: 409 });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
@@ -49,9 +55,9 @@ export async function POST(req: Request) {
       active: true,
     });
 
-    return NextResponse.json({ ok: true, message: "CERIMONIARIO inicial criado com sucesso" });
+    return jsonOk({ ok: true, message: "CERIMONIARIO inicial criado com sucesso" }, requestId);
   } catch (error) {
-    console.error("Erro no setup:", error);
-    return NextResponse.json({ error: "Erro no servidor" }, { status: 500 });
+    logError(requestId, "Erro no setup", error);
+    return toHttpResponse(error, requestId);
   }
 }

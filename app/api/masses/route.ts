@@ -1,10 +1,12 @@
-import { NextResponse } from "next/server";
-
 import dbConnect from "@/lib/db";
+import { getMongoose } from "@/lib/mongoose";
 import { requireAuth, requireCerimoniario } from "@/lib/auth";
 import { MASS_STATUSES, type MassStatus, getMassModel } from "@/models/Mass";
-import { getMongoose } from "@/lib/mongoose";
 import { getUserModel } from "@/models/User";
+import { ApiError, toHttpResponse } from "@/src/server/http/errors";
+import { jsonOk } from "@/src/server/http/response";
+import { getRequestId } from "@/src/server/http/request";
+import { logError, logInfo } from "@/src/server/http/logging";
 
 export const runtime = "nodejs";
 
@@ -13,6 +15,8 @@ const isMassStatus = (value: unknown): value is MassStatus =>
   typeof value === "string" && MASS_STATUSES.includes(value as MassStatus);
 
 export async function POST(req: Request) {
+  const requestId = getRequestId(req);
+
   try {
     const auth = await requireCerimoniario(req);
     await dbConnect();
@@ -24,7 +28,7 @@ export async function POST(req: Request) {
     };
 
     if (!body.scheduledAt || !isValidDate(body.scheduledAt)) {
-      return NextResponse.json({ error: "scheduledAt inválido" }, { status: 400 });
+      throw new ApiError({ code: "VALIDATION_ERROR", message: "scheduledAt inválido", status: 400 });
     }
 
     const mongoose = getMongoose();
@@ -33,7 +37,7 @@ export async function POST(req: Request) {
     let chiefBy = createdBy;
     if (typeof body.chiefBy === "string") {
       if (!mongoose.Types.ObjectId.isValid(body.chiefBy)) {
-        return NextResponse.json({ error: "chiefBy inválido" }, { status: 400 });
+        throw new ApiError({ code: "VALIDATION_ERROR", message: "chiefBy inválido", status: 400 });
       }
 
       const chiefUser = await getUserModel()
@@ -42,7 +46,11 @@ export async function POST(req: Request) {
         .lean();
 
       if (!chiefUser) {
-        return NextResponse.json({ error: "chiefBy deve ser um CERIMONIARIO ativo" }, { status: 400 });
+        throw new ApiError({
+          code: "VALIDATION_ERROR",
+          message: "chiefBy deve ser um CERIMONIARIO ativo",
+          status: 400,
+        });
       }
 
       chiefBy = new mongoose.Types.ObjectId(body.chiefBy);
@@ -51,9 +59,8 @@ export async function POST(req: Request) {
     const assignments =
       body.assignments?.map((assignment) => {
         const roleKey = typeof assignment.roleKey === "string" ? assignment.roleKey.trim() : "";
-
         if (!roleKey) {
-          throw new Error("roleKey inválido");
+          throw new ApiError({ code: "VALIDATION_ERROR", message: "roleKey inválido", status: 400 });
         }
 
         const userIdRaw = assignment.userId;
@@ -62,7 +69,7 @@ export async function POST(req: Request) {
         }
 
         if (typeof userIdRaw !== "string" || !mongoose.Types.ObjectId.isValid(userIdRaw)) {
-          throw new Error("userId inválido em assignments");
+          throw new ApiError({ code: "VALIDATION_ERROR", message: "userId inválido em assignments", status: 400 });
         }
 
         return { roleKey, userId: new mongoose.Types.ObjectId(userIdRaw) };
@@ -73,30 +80,21 @@ export async function POST(req: Request) {
       createdBy,
       chiefBy,
       assignments,
+      events: [{ type: "MASS_CREATED", actorId: createdBy, at: new Date() }],
     });
 
-    return NextResponse.json({ massId: mass._id.toString() }, { status: 201 });
+    logInfo(requestId, "Mass created", { massId: mass._id.toString() });
+
+    return jsonOk({ massId: mass._id.toString() }, requestId, { status: 201 });
   } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === "Não autorizado") {
-        return NextResponse.json({ error: error.message }, { status: 401 });
-      }
-
-      if (error.message === "Acesso negado") {
-        return NextResponse.json({ error: error.message }, { status: 403 });
-      }
-
-      if (error.message === "roleKey inválido" || error.message === "userId inválido em assignments") {
-        return NextResponse.json({ error: error.message }, { status: 400 });
-      }
-    }
-
-    console.error("Erro ao criar missa:", error);
-    return NextResponse.json({ error: "Erro no servidor" }, { status: 500 });
+    logError(requestId, "Erro ao criar missa", error);
+    return toHttpResponse(error, requestId);
   }
 }
 
 export async function GET(req: Request) {
+  const requestId = getRequestId(req);
+
   try {
     await requireAuth(req);
     await dbConnect();
@@ -116,7 +114,7 @@ export async function GET(req: Request) {
 
     if (statusParam) {
       if (!isMassStatus(statusParam)) {
-        return NextResponse.json({ error: "status inválido" }, { status: 400 });
+        throw new ApiError({ code: "VALIDATION_ERROR", message: "status inválido", status: 400 });
       }
       filter.status = statusParam;
     }
@@ -126,14 +124,14 @@ export async function GET(req: Request) {
 
       if (fromParam) {
         if (!isValidDate(fromParam)) {
-          return NextResponse.json({ error: "from inválido" }, { status: 400 });
+          throw new ApiError({ code: "VALIDATION_ERROR", message: "from inválido", status: 400 });
         }
         filter.scheduledAt.$gte = new Date(fromParam);
       }
 
       if (toParam) {
         if (!isValidDate(toParam)) {
-          return NextResponse.json({ error: "to inválido" }, { status: 400 });
+          throw new ApiError({ code: "VALIDATION_ERROR", message: "to inválido", status: 400 });
         }
         filter.scheduledAt.$lte = new Date(toParam);
       }
@@ -145,21 +143,20 @@ export async function GET(req: Request) {
       .select("_id status scheduledAt chiefBy createdBy")
       .lean();
 
-    return NextResponse.json({
-      items: masses.map((mass) => ({
-        id: mass._id.toString(),
-        status: mass.status,
-        scheduledAt: mass.scheduledAt,
-        chiefBy: mass.chiefBy?.toString(),
-        createdBy: mass.createdBy?.toString(),
-      })),
-    });
+    return jsonOk(
+      {
+        items: masses.map((mass) => ({
+          id: mass._id.toString(),
+          status: mass.status,
+          scheduledAt: mass.scheduledAt,
+          chiefBy: mass.chiefBy?.toString(),
+          createdBy: mass.createdBy?.toString(),
+        })),
+      },
+      requestId
+    );
   } catch (error) {
-    if (error instanceof Error && error.message === "Não autorizado") {
-      return NextResponse.json({ error: error.message }, { status: 401 });
-    }
-
-    console.error("Erro ao listar missas:", error);
-    return NextResponse.json({ error: "Erro no servidor" }, { status: 500 });
+    logError(requestId, "Erro ao listar missas", error);
+    return toHttpResponse(error, requestId);
   }
 }
