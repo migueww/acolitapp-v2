@@ -1,72 +1,111 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Acolitapp v2
 
-## Getting Started
+Projeto Next.js (App Router) com MongoDB + Mongoose e autenticação baseada em JWT com cookie httpOnly.
 
-### Requisitos
+## Requisitos
 
 - Node.js 18+
-- MongoDB em execução localmente ou via Atlas
+- MongoDB local ou Atlas
 
-### Variáveis de ambiente
+## Variáveis de ambiente
 
-Crie um arquivo `.env.local` com valores de exemplo (não coloque segredos reais em repositórios públicos):
+Crie `.env.local`:
 
 ```bash
 MONGODB_URI="mongodb://localhost:27017/acolitapp-db"
-JWT_SECRET="troque-este-segredo"
+JWT_SECRET="troque-este-segredo-forte"
+SETUP_TOKEN="token-unico-para-bootstrap"
 ```
 
-### Rodando o projeto
-
-First, run the development server:
+## Rodando o projeto
 
 ```bash
 npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Obs.: este repositório não versiona `package-lock.json`, então use `npm install` para resolver dependências a partir do `package.json`.
+Aplicação em `http://localhost:3000`.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Fluxo de bootstrap (primeiro CERIMONIARIO)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-### Endpoints úteis
-
-Login (retorna JWT):
+O sistema não permite self-signup público. O primeiro CERIMONIARIO deve ser criado uma única vez via `POST /api/setup` com header `x-setup-token`.
 
 ```bash
-curl -X POST http://localhost:3000/api/auth/login \\
-  -H 'Content-Type: application/json' \\
-  -d '{\"username\":\"usuario@exemplo.com\",\"password\":\"senha\"}'
+curl -X POST http://localhost:3000/api/setup \
+  -H 'Content-Type: application/json' \
+  -H 'x-setup-token: token-unico-para-bootstrap' \
+  -d '{"name":"Admin Inicial","username":"admin","password":"SenhaForte123"}'
 ```
 
-Endpoint protegido (envie o token no Authorization Bearer):
+Se já existir CERIMONIARIO, a rota retorna `409`.
+
+## Login e persistência de sessão
+
+`POST /api/login` valida credenciais e grava cookie `session` com:
+
+- `httpOnly`
+- `SameSite=Lax`
+- `Path=/`
+- `Secure` em produção
+
+Ao logar com sucesso, a UI redireciona para `/masses`. Ao acessar `/login` já autenticado, há redirecionamento automático para `/masses`.
+
+## Endpoints RBAC
+
+### Health protegido (qualquer autenticado)
 
 ```bash
-curl http://localhost:3000/api/health/protected \\
-  -H 'Authorization: Bearer <SEU_TOKEN>'
+curl -i http://localhost:3000/api/health/protected
 ```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Com cookie de sessão válido, retorna `200` com `user.id` e `user.role`.
 
-## Learn More
+### Health admin-only (somente CERIMONIARIO)
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+curl -i http://localhost:3000/api/health/admin
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `200` para CERIMONIARIO
+- `403` para ACOLITO
+- `401` sem sessão
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Criar usuário (somente CERIMONIARIO)
 
-## Deploy on Vercel
+```bash
+curl -X POST http://localhost:3000/api/users \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Novo Acólito","username":"acolito1","password":"Senha123","role":"ACOLITO"}'
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Essa rota exige sessão válida de CERIMONIARIO.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Teste manual ponta a ponta (com cookies)
+
+1. Bootstrap do admin em `/api/setup`.
+2. Login do admin em `/api/login` salvando cookie:
+
+```bash
+curl -i -c cookie.txt -X POST http://localhost:3000/api/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"SenhaForte123"}'
+```
+
+3. Criar usuário com sessão do admin:
+
+```bash
+curl -i -b cookie.txt -X POST http://localhost:3000/api/users \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Acolito","username":"acolito","password":"Senha123","role":"ACOLITO"}'
+```
+
+4. Validar endpoints protegidos:
+
+```bash
+curl -i -b cookie.txt http://localhost:3000/api/health/protected
+curl -i -b cookie.txt http://localhost:3000/api/health/admin
+```
+
+## Decisão sobre signup público
+
+A rota pública de signup (`/api/signup`) foi mantida apenas para compatibilidade e agora retorna `403` com mensagem explícita informando que o cadastro público está desabilitado.
