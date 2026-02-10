@@ -1,12 +1,13 @@
-import { NextResponse } from "next/server";
-
 import dbConnect from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { getMongoose } from "@/lib/mongoose";
 import { getUserModel } from "@/models/User";
 import { assignRolesMassAction } from "@/src/domain/mass/actions";
-import { toErrorResponse, ValidationError } from "@/src/domain/mass/errors";
 import { serializeMass } from "@/src/domain/mass/serializers";
+import { ApiError, toHttpResponse } from "@/src/server/http/errors";
+import { getRequestId } from "@/src/server/http/request";
+import { jsonOk } from "@/src/server/http/response";
+import { logError, logInfo } from "@/src/server/http/logging";
 
 export const runtime = "nodejs";
 
@@ -17,7 +18,7 @@ type InputAssignment = {
 
 const normalizeAssignments = async (rawAssignments: unknown) => {
   if (!Array.isArray(rawAssignments)) {
-    throw new ValidationError("assignments deve ser um array");
+    throw new ApiError({ code: "VALIDATION_ERROR", message: "assignments deve ser um array", status: 400 });
   }
 
   const mongoose = getMongoose();
@@ -27,7 +28,7 @@ const normalizeAssignments = async (rawAssignments: unknown) => {
 
     const roleKey = typeof assignment.roleKey === "string" ? assignment.roleKey.trim().toUpperCase() : "";
     if (!roleKey) {
-      throw new ValidationError("roleKey inválido em assignments");
+      throw new ApiError({ code: "VALIDATION_ERROR", message: "roleKey inválido em assignments", status: 400 });
     }
 
     const userIdRaw = assignment.userId;
@@ -36,7 +37,7 @@ const normalizeAssignments = async (rawAssignments: unknown) => {
     }
 
     if (typeof userIdRaw !== "string" || !mongoose.Types.ObjectId.isValid(userIdRaw)) {
-      throw new ValidationError("userId inválido em assignments");
+      throw new ApiError({ code: "VALIDATION_ERROR", message: "userId inválido em assignments", status: 400 });
     }
 
     return { roleKey, userId: new mongoose.Types.ObjectId(userIdRaw) };
@@ -55,7 +56,11 @@ const normalizeAssignments = async (rawAssignments: unknown) => {
     });
 
     if (validUsersCount !== uniqueIds.length) {
-      throw new ValidationError("Todos os userId em assignments devem ser ACOLITO ativo");
+      throw new ApiError({
+        code: "VALIDATION_ERROR",
+        message: "Todos os userId em assignments devem ser ACOLITO ativo",
+        status: 400,
+      });
     }
   }
 
@@ -63,6 +68,8 @@ const normalizeAssignments = async (rawAssignments: unknown) => {
 };
 
 export async function POST(req: Request, context: { params: Promise<{ id: string }> }) {
+  const requestId = getRequestId(req);
+
   try {
     const actor = await requireAuth(req);
     await dbConnect();
@@ -72,15 +79,11 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 
     const { id: massId } = await context.params;
     const mass = await assignRolesMassAction({ massId, actor, assignments });
+    logInfo(requestId, "Mass assignments updated", { massId, assignmentsCount: assignments.length });
 
-    return NextResponse.json({ ok: true, mass: serializeMass(mass) });
+    return jsonOk({ ok: true, mass: serializeMass(mass) }, requestId);
   } catch (error) {
-    const mapped = toErrorResponse(error);
-    if (mapped) {
-      return NextResponse.json({ error: mapped.message }, { status: mapped.status });
-    }
-
-    console.error("Erro ao atribuir funções da missa:", error);
-    return NextResponse.json({ error: "Erro no servidor" }, { status: 500 });
+    logError(requestId, "Erro ao atribuir funções da missa", error);
+    return toHttpResponse(error, requestId);
   }
 }

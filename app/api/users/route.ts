@@ -1,16 +1,21 @@
-import { NextResponse } from "next/server";
 import bcrypt from "bcrypt";
 
 import dbConnect from "@/lib/db";
 import { requireCerimoniario } from "@/lib/auth";
 import type { UserRole } from "@/lib/auth";
 import { getUserModel } from "@/models/User";
+import { ApiError, toHttpResponse } from "@/src/server/http/errors";
+import { getRequestId } from "@/src/server/http/request";
+import { jsonOk } from "@/src/server/http/response";
+import { logError } from "@/src/server/http/logging";
 
 export const runtime = "nodejs";
 
 const isValidRole = (role: unknown): role is UserRole => role === "CERIMONIARIO" || role === "ACOLITO";
 
 export async function POST(req: Request) {
+  const requestId = getRequestId(req);
+
   try {
     await requireCerimoniario(req);
     await dbConnect();
@@ -28,12 +33,12 @@ export async function POST(req: Request) {
     const role = body.role;
 
     if (!name || !username || !password || !isValidRole(role)) {
-      return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
+      throw new ApiError({ code: "VALIDATION_ERROR", message: "Dados inválidos", status: 400 });
     }
 
     const existingUser = await getUserModel().exists({ username });
     if (existingUser) {
-      return NextResponse.json({ error: "Username já em uso" }, { status: 409 });
+      throw new ApiError({ code: "CONFLICT", message: "Username já em uso", status: 409 });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
@@ -46,7 +51,7 @@ export async function POST(req: Request) {
       active: true,
     });
 
-    return NextResponse.json(
+    return jsonOk(
       {
         ok: true,
         user: {
@@ -57,14 +62,11 @@ export async function POST(req: Request) {
           active: createdUser.active,
         },
       },
+      requestId,
       { status: 201 }
     );
   } catch (error) {
-    if (error instanceof Error && (error.message === "Não autorizado" || error.message === "Acesso negado")) {
-      return NextResponse.json({ error: error.message }, { status: error.message === "Não autorizado" ? 401 : 403 });
-    }
-
-    console.error("Erro ao criar usuário:", error);
-    return NextResponse.json({ error: "Erro no servidor" }, { status: 500 });
+    logError(requestId, "Erro ao criar usuário", error);
+    return toHttpResponse(error, requestId);
   }
 }
