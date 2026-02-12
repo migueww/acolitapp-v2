@@ -10,8 +10,19 @@ Projeto Next.js (**App Router**) com MongoDB + Mongoose e autenticação JWT (co
 
 ## Requisitos
 
-- Node.js 18+
+- Node.js 20.18.0 (recomendado, veja `.nvmrc`)
+- Node.js 18.18+ (mínimo)
 - MongoDB local ou Atlas
+
+## Reset recipe (ambiente local)
+
+Se o ambiente de desenvolvimento ficar inconsistente, faça um reset completo:
+
+```bash
+rm -rf node_modules .next
+npm ci
+npm run dev
+```
 
 ## Variáveis de ambiente
 
@@ -47,6 +58,18 @@ Todos os erros de API seguem o formato:
 Além disso, o header `x-request-id` também é retornado.
 
 ## Endpoints operacionais novos
+
+### GET `/api/health` (interno)
+
+Retorna status simples para sanity check local:
+
+```json
+{ "ok": true, "env": "development", "db": "connected" }
+```
+
+- `db` será `connected` quando o Mongo responder dentro de ~1.5s.
+- Se não houver conexão/timeout, retorna `db: "disconnected"` sem quebrar o endpoint.
+- Inclui `x-request-id` no header e no formato padrão das respostas de erro (quando aplicável).
 
 ### GET `/api/masses/mine` (auth obrigatório)
 
@@ -167,3 +190,34 @@ curl -i -c cookie.txt -X POST http://localhost:3000/api/login \
 ## Compatibilidade
 
 A rota pública de signup (`/api/signup`) foi mantida por compatibilidade e retorna `403`.
+
+## Dev indicator/overlay do Next ("botãozinho")
+
+### Causa raiz identificada
+
+O `middleware.ts` aplicava uma CSP única e rígida para **todos** os ambientes:
+
+```
+default-src 'self'; frame-ancestors 'none'; base-uri 'self';
+```
+
+Em desenvolvimento, essa política pode bloquear recursos usados pelo tooling do Next (scripts inline/eval e conexões de HMR/overlay), impedindo o indicador visual de aparecer.
+
+### Correção aplicada
+
+- CSP condicional por ambiente no `middleware.ts`:
+  - **dev**: política mais permissiva para tooling (`'unsafe-inline'`, `'unsafe-eval'`, `ws:`/`wss:` em `connect-src`).
+  - **prod**: política restritiva original mantida.
+- `matcher` do middleware ajustado para não capturar assets internos (`_next/static`, `_next/image`) e arquivos comuns (`favicon`, `robots`, `sitemap`).
+
+### Como verificar
+
+1. Rode `npm run dev`.
+2. Abra `http://localhost:3000/login` no navegador.
+3. Confirme que o indicador/overlay de dev do Next aparece no canto da tela.
+4. No DevTools, verifique se não há erros de CSP relacionados a scripts/HMR.
+
+### Como evitar regressão
+
+- Não aplicar CSP de produção em desenvolvimento sem exceções para tooling do Next.
+- Ao editar middleware/headers, validar sempre a rota `/login` em `next dev` e conferir o indicador visual do Next.
