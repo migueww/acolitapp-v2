@@ -5,6 +5,7 @@ import { getRequestId } from "@/src/server/http/request";
 import { jsonOk } from "@/src/server/http/response";
 import { toHttpResponse } from "@/src/server/http/errors";
 import { logError } from "@/src/server/http/logging";
+import { getUserNameMapByIds } from "@/src/server/users/lookup";
 
 export const runtime = "nodejs";
 
@@ -47,6 +48,7 @@ export async function GET(req: Request) {
     if (!picked) {
       return jsonOk({ item: null }, requestId);
     }
+    const userNameMap = await getUserNameMapByIds([picked.createdBy, picked.chiefBy]);
 
     return jsonOk(
       {
@@ -57,6 +59,8 @@ export async function GET(req: Request) {
           scheduledAt: picked.scheduledAt,
           chiefBy: picked.chiefBy.toString(),
           createdBy: picked.createdBy.toString(),
+          chiefByName: userNameMap.get(picked.chiefBy.toString()) ?? null,
+          createdByName: userNameMap.get(picked.createdBy.toString()) ?? null,
         },
       },
       requestId

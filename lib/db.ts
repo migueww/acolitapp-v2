@@ -1,3 +1,5 @@
+import dns from "node:dns";
+
 import {
   getMongoose,
   type MongooseConnection,
@@ -11,6 +13,14 @@ if (!MONGODB_URI) {
 }
 
 const MONGODB_URI_SAFE = MONGODB_URI;
+const DNS_SERVERS = (process.env.DNS_SERVERS ?? "8.8.8.8,1.1.1.1")
+  .split(",")
+  .map((server) => server.trim())
+  .filter(Boolean);
+
+if (MONGODB_URI_SAFE.startsWith("mongodb+srv://") && DNS_SERVERS.length > 0) {
+  dns.setServers(DNS_SERVERS);
+}
 
 type MongooseCache = {
   conn: MongooseConnection | null;

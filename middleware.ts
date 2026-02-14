@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-import { getAuth } from "@/lib/auth";
-
 const PUBLIC_PATH_PREFIXES = ["/_next", "/api", "/favicon.ico", "/robots.txt", "/sitemap.xml", "/login"];
 
 const isDevRequest = (req: NextRequest): boolean => {
@@ -44,9 +42,8 @@ export async function middleware(req: NextRequest) {
     return response;
   }
 
-  const auth = await getAuth(req);
-
-  if (!auth) {
+  const hasSessionCookie = Boolean(req.cookies.get("session")?.value);
+  if (!hasSessionCookie) {
     const response = NextResponse.redirect(new URL("/login", req.url));
     response.headers.set("x-request-id", requestId);
     applySecurityHeaders(response, req);

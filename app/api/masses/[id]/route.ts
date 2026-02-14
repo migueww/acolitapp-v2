@@ -1,11 +1,12 @@
-import dbConnect from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
-import { getMassModel } from "@/models/Mass";
+import dbConnect from "@/lib/db";
 import { getMongoose } from "@/lib/mongoose";
+import { getMassModel } from "@/models/Mass";
 import { ApiError, toHttpResponse } from "@/src/server/http/errors";
-import { jsonOk } from "@/src/server/http/response";
-import { getRequestId } from "@/src/server/http/request";
 import { logError } from "@/src/server/http/logging";
+import { getRequestId } from "@/src/server/http/request";
+import { jsonOk } from "@/src/server/http/response";
+import { getUserNameMapByIds } from "@/src/server/users/lookup";
 
 export const runtime = "nodejs";
 
@@ -22,15 +23,30 @@ export async function GET(req: Request, context: RouteContext) {
 
     const { id } = await context.params;
     const mongoose = getMongoose();
-
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      throw new ApiError({ code: "VALIDATION_ERROR", message: "id inválido", status: 400 });
+      throw new ApiError({ code: "VALIDATION_ERROR", message: "id invalido", status: 400 });
     }
 
     const mass = await getMassModel().findById(id).lean();
     if (!mass) {
-      throw new ApiError({ code: "NOT_FOUND", message: "Missa não encontrada", status: 404 });
+      throw new ApiError({ code: "NOT_FOUND", message: "Missa nao encontrada", status: 404 });
     }
+
+    const joinedEntries = mass.attendance?.joined ?? [];
+    const confirmedEntries = mass.attendance?.confirmed ?? [];
+    const pendingEntries = mass.attendance?.pending ?? [];
+    const assignments = mass.assignments ?? [];
+    const events = mass.events ?? [];
+
+    const userNameMap = await getUserNameMapByIds([
+      mass.createdBy,
+      mass.chiefBy,
+      ...joinedEntries.map((entry) => entry.userId),
+      ...confirmedEntries.map((entry) => entry.userId),
+      ...pendingEntries.map((entry) => entry.userId),
+      ...assignments.map((assignment) => assignment.userId),
+      ...events.map((event) => event.actorId),
+    ]);
 
     return jsonOk(
       {
@@ -40,34 +56,42 @@ export async function GET(req: Request, context: RouteContext) {
         scheduledAt: mass.scheduledAt,
         createdBy: mass.createdBy.toString(),
         chiefBy: mass.chiefBy.toString(),
+        createdByName: userNameMap.get(mass.createdBy.toString()) ?? null,
+        chiefByName: userNameMap.get(mass.chiefBy.toString()) ?? null,
         openedAt: mass.openedAt ?? null,
         preparationAt: mass.preparationAt ?? null,
         finishedAt: mass.finishedAt ?? null,
         canceledAt: mass.canceledAt ?? null,
         attendance: {
-          joined:
-            mass.attendance?.joined?.map((entry) => ({
-              userId: entry.userId.toString(),
-              joinedAt: entry.joinedAt,
-            })) ?? [],
-          confirmed:
-            mass.attendance?.confirmed?.map((entry) => ({
-              userId: entry.userId.toString(),
-              confirmedAt: entry.confirmedAt,
-            })) ?? [],
+          joined: joinedEntries.map((entry) => ({
+            userId: entry.userId.toString(),
+            userName: userNameMap.get(entry.userId.toString()) ?? null,
+            joinedAt: entry.joinedAt,
+          })),
+          confirmed: confirmedEntries.map((entry) => ({
+            userId: entry.userId.toString(),
+            userName: userNameMap.get(entry.userId.toString()) ?? null,
+            confirmedAt: entry.confirmedAt,
+          })),
+          pending: pendingEntries.map((entry) => ({
+            requestId: entry.requestId,
+            userId: entry.userId.toString(),
+            userName: userNameMap.get(entry.userId.toString()) ?? null,
+            requestedAt: entry.requestedAt,
+          })),
         },
-        assignments:
-          mass.assignments?.map((assignment) => ({
-            roleKey: assignment.roleKey,
-            userId: assignment.userId ? assignment.userId.toString() : null,
-          })) ?? [],
-        events:
-          mass.events?.map((event) => ({
-            type: event.type,
-            actorId: event.actorId.toString(),
-            at: event.at,
-            payload: event.payload ?? null,
-          })) ?? [],
+        assignments: assignments.map((assignment) => ({
+          roleKey: assignment.roleKey,
+          userId: assignment.userId ? assignment.userId.toString() : null,
+          userName: assignment.userId ? userNameMap.get(assignment.userId.toString()) ?? null : null,
+        })),
+        events: events.map((event) => ({
+          type: event.type,
+          actorId: event.actorId.toString(),
+          actorName: userNameMap.get(event.actorId.toString()) ?? null,
+          at: event.at,
+          payload: event.payload ?? null,
+        })),
         createdAt: mass.createdAt,
         updatedAt: mass.updatedAt,
       },

@@ -13,6 +13,12 @@ export type AttendanceEntry = {
   confirmedAt?: Date;
 };
 
+export type PendingConfirmationEntry = {
+  requestId: string;
+  userId: Types.ObjectId;
+  requestedAt: Date;
+};
+
 export type AssignmentEntry = {
   roleKey: string;
   userId: Types.ObjectId | null;
@@ -39,6 +45,7 @@ export type MassDocument = {
   attendance: {
     joined: Array<AttendanceEntry>;
     confirmed: Array<AttendanceEntry>;
+    pending: Array<PendingConfirmationEntry>;
   };
   assignments: Array<AssignmentEntry>;
   events: Array<EventEntry>;
@@ -61,6 +68,15 @@ const buildMassSchema = (mongoose: ReturnType<typeof getMongoose>) => {
     {
       userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
       confirmedAt: { type: Date, default: Date.now, required: true },
+    },
+    { _id: false }
+  );
+
+  const attendancePendingSchema = new mongoose.Schema(
+    {
+      requestId: { type: String, required: true, trim: true },
+      userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+      requestedAt: { type: Date, default: Date.now, required: true },
     },
     { _id: false }
   );
@@ -106,6 +122,7 @@ const buildMassSchema = (mongoose: ReturnType<typeof getMongoose>) => {
       attendance: {
         joined: { type: [attendanceJoinedSchema], default: [] },
         confirmed: { type: [attendanceConfirmedSchema], default: [] },
+        pending: { type: [attendancePendingSchema], default: [] },
       },
       assignments: { type: [assignmentSchema], default: [] },
       events: { type: [eventSchema], default: [] },

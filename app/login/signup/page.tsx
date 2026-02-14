@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function SignupDisabledPage() {
@@ -12,9 +13,9 @@ export default function SignupDisabledPage() {
             <CardDescription>Somente CERIMONIARIO pode criar novos usuários.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Link href="/login" className="underline">
-              Voltar para login
-            </Link>
+            <Button asChild className="w-full" variant="outline">
+              <Link href="/login">Voltar para login</Link>
+            </Button>
           </CardContent>
         </Card>
       </main>

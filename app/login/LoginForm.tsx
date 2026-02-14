@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 
 export default function LoginForm() {
   const router = useRouter();
-  const [username, setUsername] = React.useState("");
+  const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [message, setMessage] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -27,13 +27,13 @@ export default function LoginForm() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email, password }),
       });
 
-      const result = (await response.json()) as { error?: string };
+      const result = (await response.json()) as { error?: { message?: string } };
 
       if (!response.ok) {
-        setMessage(result.error ?? "Falha ao autenticar");
+        setMessage(result.error?.message ?? "Falha ao autenticar");
         return;
       }
 
@@ -58,14 +58,14 @@ export default function LoginForm() {
           <CardContent>
             <div className="grid gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="username">Username</Label>
+                <Label htmlFor="email">Email</Label>
                 <Input
-                  id="username"
-                  type="text"
-                  placeholder="cerimoniario"
+                  id="email"
+                  type="email"
+                  placeholder="cerimoniario@paroquia.org"
                   required
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value)}
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
                 />
               </div>
               <div className="grid gap-2">

@@ -5,6 +5,7 @@ import { ApiError, toHttpResponse } from "@/src/server/http/errors";
 import { getRequestId } from "@/src/server/http/request";
 import { jsonOk } from "@/src/server/http/response";
 import { logError } from "@/src/server/http/logging";
+import { getUserNameMapByIds } from "@/src/server/users/lookup";
 
 export const runtime = "nodejs";
 
@@ -69,6 +70,9 @@ export async function GET(req: Request) {
       .limit(limit)
       .select("_id status massType scheduledAt chiefBy createdBy")
       .lean();
+    const userNameMap = await getUserNameMapByIds(
+      masses.flatMap((mass) => [mass.createdBy, mass.chiefBy])
+    );
 
     return jsonOk(
       {
@@ -79,6 +83,8 @@ export async function GET(req: Request) {
           scheduledAt: mass.scheduledAt,
           chiefBy: mass.chiefBy.toString(),
           createdBy: mass.createdBy.toString(),
+          chiefByName: userNameMap.get(mass.chiefBy.toString()) ?? null,
+          createdByName: userNameMap.get(mass.createdBy.toString()) ?? null,
         })),
         page,
         limit,

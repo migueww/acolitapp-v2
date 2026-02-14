@@ -22,6 +22,12 @@ export const serializeMass = (mass: MassDocument) => ({
         userId: entry.userId.toString(),
         confirmedAt: entry.confirmedAt,
       })) ?? [],
+    pending:
+      mass.attendance?.pending?.map((entry) => ({
+        requestId: entry.requestId,
+        userId: entry.userId.toString(),
+        requestedAt: entry.requestedAt,
+      })) ?? [],
   },
   assignments:
     mass.assignments?.map((assignment) => ({
