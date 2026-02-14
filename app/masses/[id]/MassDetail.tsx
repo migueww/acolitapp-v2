@@ -59,6 +59,7 @@ const SHORT_ID_HEAD = 6;
 const SHORT_ID_TAIL = 4;
 const QR_SIZE = 320;
 const SCAN_INTERVAL_MS = 700;
+const MAX_CONSECUTIVE_SCAN_ERRORS = 6;
 
 const shortenId = (id: string): string => `${id.slice(0, SHORT_ID_HEAD)}...${id.slice(-SHORT_ID_TAIL)}`;
 const userLabel = (name: string | null, id: string | null): string => {
@@ -93,6 +94,8 @@ export function MassDetail({ id }: { id: string }) {
   const streamRef = React.useRef<MediaStream | null>(null);
   const scanIntervalRef = React.useRef<number | null>(null);
   const scanBusyRef = React.useRef(false);
+  const scanCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
+  const consecutiveScanErrorsRef = React.useRef(0);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -175,12 +178,14 @@ export function MassDetail({ id }: { id: string }) {
       videoRef.current.srcObject = null;
     }
     scanBusyRef.current = false;
+    consecutiveScanErrorsRef.current = 0;
   }, []);
 
   const startScanner = React.useCallback(async () => {
     stopScanner();
     setScannerError(null);
     setScanPreview(null);
+    consecutiveScanErrorsRef.current = 0;
 
     try {
       if (typeof window === "undefined" || !("mediaDevices" in navigator) || !navigator.mediaDevices.getUserMedia) {
@@ -211,7 +216,29 @@ export function MassDetail({ id }: { id: string }) {
 
         scanBusyRef.current = true;
         try {
-          const codes = await detector.detect(videoRef.current);
+          const video = videoRef.current;
+          const frameWidth = video.videoWidth;
+          const frameHeight = video.videoHeight;
+
+          if (!frameWidth || !frameHeight) return;
+
+          if (!scanCanvasRef.current) {
+            scanCanvasRef.current = document.createElement("canvas");
+          }
+
+          const canvas = scanCanvasRef.current;
+          if (canvas.width !== frameWidth || canvas.height !== frameHeight) {
+            canvas.width = frameWidth;
+            canvas.height = frameHeight;
+          }
+
+          const context = canvas.getContext("2d", { willReadFrequently: true });
+          if (!context) {
+            throw new Error("Nao foi possivel processar os frames da camera.");
+          }
+
+          context.drawImage(video, 0, 0, frameWidth, frameHeight);
+          const codes = await detector.detect(canvas);
           const value = codes[0]?.rawValue;
           if (!value) return;
 
@@ -220,9 +247,18 @@ export function MassDetail({ id }: { id: string }) {
             body: JSON.stringify({ qrPayload: value }),
           });
           setScanPreview(preview);
+          setScannerError(null);
           stopScanner();
-        } catch {
-          // Ignore frame read errors; explicit API errors are shown when action is attempted.
+        } catch (e) {
+          if (e instanceof ApiClientError) {
+            setScannerError(e.message);
+            return;
+          }
+
+          consecutiveScanErrorsRef.current += 1;
+          if (consecutiveScanErrorsRef.current >= MAX_CONSECUTIVE_SCAN_ERRORS) {
+            setScannerError("Nao foi possivel ler o QR nesta camera. Tente ajustar foco/distancia ou use Chrome/Edge atualizado.");
+          }
         } finally {
           scanBusyRef.current = false;
         }
