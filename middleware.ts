@@ -25,7 +25,20 @@ const applySecurityHeaders = (response: NextResponse, req: NextRequest) => {
     return;
   }
 
-  response.headers.set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'self';");
+  response.headers.set(
+    "Content-Security-Policy",
+    [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob: https:",
+      "font-src 'self' data:",
+      "connect-src 'self' https:",
+      "media-src 'self' blob:",
+      "frame-ancestors 'none'",
+      "base-uri 'self'",
+    ].join("; ")
+  );
 };
 
 export async function middleware(req: NextRequest) {
