@@ -1,20 +1,20 @@
 import dbConnect from "@/lib/db";
 import { getMongoose } from "@/lib/mongoose";
 import { requireAuth, requireCerimoniario } from "@/lib/auth";
-import { MASS_STATUSES, MASS_TYPES, type MassStatus, type MassType, getMassModel } from "@/models/Mass";
+import { MASS_STATUSES, type MassStatus, getMassModel } from "@/models/Mass";
 import { getUserModel } from "@/models/User";
 import { ApiError, toHttpResponse } from "@/src/server/http/errors";
 import { jsonOk } from "@/src/server/http/response";
 import { getRequestId } from "@/src/server/http/request";
 import { logError, logInfo } from "@/src/server/http/logging";
 import { getUserNameMapByIds } from "@/src/server/users/lookup";
+import { isValidActiveMassType, normalizeLiturgyKey } from "@/src/domain/liturgy/service";
 
 export const runtime = "nodejs";
 
 const isValidDate = (value: string): boolean => !Number.isNaN(new Date(value).getTime());
 const isMassStatus = (value: unknown): value is MassStatus =>
   typeof value === "string" && MASS_STATUSES.includes(value as MassStatus);
-const isMassType = (value: unknown): value is MassType => typeof value === "string" && MASS_TYPES.includes(value as MassType);
 
 export async function POST(req: Request) {
   const requestId = getRequestId(req);
@@ -24,18 +24,36 @@ export async function POST(req: Request) {
     await dbConnect();
 
     const body = (await req.json()) as {
+      name?: string;
       scheduledAt?: string;
       massType?: string;
       chiefBy?: string;
       assignments?: Array<{ roleKey?: unknown; userId?: unknown }>;
     };
 
-    if (!body.scheduledAt || !isValidDate(body.scheduledAt)) {
-      throw new ApiError({ code: "VALIDATION_ERROR", message: "scheduledAt inválido", status: 400 });
+    const scheduledAt =
+      body.scheduledAt && isValidDate(body.scheduledAt)
+        ? new Date(body.scheduledAt)
+        : (() => {
+            const fallback = new Date();
+            fallback.setHours(fallback.getHours() + 1);
+            fallback.setSeconds(0);
+            fallback.setMilliseconds(0);
+            return fallback;
+          })();
+
+    const massType = typeof body.massType === "string" ? normalizeLiturgyKey(body.massType) : "";
+    if (!massType) {
+      throw new ApiError({ code: "VALIDATION_ERROR", message: "massType invalido", status: 400 });
+    }
+    const validMassType = await isValidActiveMassType(massType);
+    if (!validMassType) {
+      throw new ApiError({ code: "VALIDATION_ERROR", message: "massType inexistente ou inativo", status: 400 });
     }
 
-    if (!isMassType(body.massType)) {
-      throw new ApiError({ code: "VALIDATION_ERROR", message: "massType inválido", status: 400 });
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    if (name.length > 80) {
+      throw new ApiError({ code: "VALIDATION_ERROR", message: "name deve ter no maximo 80 caracteres", status: 400 });
     }
 
     const mongoose = getMongoose();
@@ -44,7 +62,7 @@ export async function POST(req: Request) {
     let chiefBy = createdBy;
     if (typeof body.chiefBy === "string") {
       if (!mongoose.Types.ObjectId.isValid(body.chiefBy)) {
-        throw new ApiError({ code: "VALIDATION_ERROR", message: "chiefBy inválido", status: 400 });
+        throw new ApiError({ code: "VALIDATION_ERROR", message: "chiefBy invalido", status: 400 });
       }
 
       const chiefUser = await getUserModel()
@@ -67,7 +85,7 @@ export async function POST(req: Request) {
       body.assignments?.map((assignment) => {
         const roleKey = typeof assignment.roleKey === "string" ? assignment.roleKey.trim() : "";
         if (!roleKey) {
-          throw new ApiError({ code: "VALIDATION_ERROR", message: "roleKey inválido", status: 400 });
+          throw new ApiError({ code: "VALIDATION_ERROR", message: "roleKey invalido", status: 400 });
         }
 
         const userIdRaw = assignment.userId;
@@ -76,15 +94,16 @@ export async function POST(req: Request) {
         }
 
         if (typeof userIdRaw !== "string" || !mongoose.Types.ObjectId.isValid(userIdRaw)) {
-          throw new ApiError({ code: "VALIDATION_ERROR", message: "userId inválido em assignments", status: 400 });
+          throw new ApiError({ code: "VALIDATION_ERROR", message: "userId invalido em assignments", status: 400 });
         }
 
         return { roleKey, userId: new mongoose.Types.ObjectId(userIdRaw) };
       }) ?? [];
 
     const mass = await getMassModel().create({
-      scheduledAt: new Date(body.scheduledAt),
-      massType: body.massType,
+      name,
+      scheduledAt,
+      massType,
       createdBy,
       chiefBy,
       assignments,
@@ -119,7 +138,7 @@ export async function GET(req: Request) {
     const limit = Math.min(Math.max(Number(searchParams.get("limit") || "20"), 1), 100);
 
     if (!Number.isInteger(page) || page < 1) {
-      throw new ApiError({ code: "VALIDATION_ERROR", message: "page inválido", status: 400 });
+      throw new ApiError({ code: "VALIDATION_ERROR", message: "page invalido", status: 400 });
     }
 
     const filter: {
@@ -132,7 +151,7 @@ export async function GET(req: Request) {
 
     if (statusParam) {
       if (!isMassStatus(statusParam)) {
-        throw new ApiError({ code: "VALIDATION_ERROR", message: "status inválido", status: 400 });
+        throw new ApiError({ code: "VALIDATION_ERROR", message: "status invalido", status: 400 });
       }
       filter.status = statusParam;
     }
@@ -142,14 +161,14 @@ export async function GET(req: Request) {
 
       if (fromParam) {
         if (!isValidDate(fromParam)) {
-          throw new ApiError({ code: "VALIDATION_ERROR", message: "from inválido", status: 400 });
+          throw new ApiError({ code: "VALIDATION_ERROR", message: "from invalido", status: 400 });
         }
         filter.scheduledAt.$gte = new Date(fromParam);
       }
 
       if (toParam) {
         if (!isValidDate(toParam)) {
-          throw new ApiError({ code: "VALIDATION_ERROR", message: "to inválido", status: 400 });
+          throw new ApiError({ code: "VALIDATION_ERROR", message: "to invalido", status: 400 });
         }
         filter.scheduledAt.$lte = new Date(toParam);
       }
@@ -160,7 +179,7 @@ export async function GET(req: Request) {
       .sort({ scheduledAt: 1 })
       .skip((page - 1) * limit)
       .limit(limit)
-      .select("_id status massType scheduledAt chiefBy createdBy")
+      .select("_id name status massType scheduledAt chiefBy createdBy")
       .lean();
     const userNameMap = await getUserNameMapByIds(
       masses.flatMap((mass) => [mass.createdBy, mass.chiefBy])
@@ -170,6 +189,7 @@ export async function GET(req: Request) {
       {
         items: masses.map((mass) => ({
           id: mass._id.toString(),
+          name: mass.name ?? "",
           status: mass.status,
           massType: mass.massType,
           scheduledAt: mass.scheduledAt,
@@ -188,3 +208,5 @@ export async function GET(req: Request) {
     return toHttpResponse(error, requestId);
   }
 }
+
+

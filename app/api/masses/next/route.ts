@@ -36,7 +36,7 @@ export async function GET(req: Request) {
     const masses = await getMassModel()
       .find(query)
       .sort({ scheduledAt: 1 })
-      .select("_id status massType scheduledAt chiefBy createdBy")
+      .select("_id name status massType scheduledAt chiefBy createdBy")
       .limit(50)
       .lean();
 
@@ -54,6 +54,7 @@ export async function GET(req: Request) {
       {
         item: {
           id: picked._id.toString(),
+          name: picked.name ?? "",
           status: picked.status,
           massType: picked.massType,
           scheduledAt: picked.scheduledAt,

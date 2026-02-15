@@ -4,8 +4,7 @@ import { getMongoose } from "@/lib/mongoose";
 
 export const MASS_STATUSES = ["SCHEDULED", "OPEN", "PREPARATION", "FINISHED", "CANCELED"] as const;
 export type MassStatus = (typeof MASS_STATUSES)[number];
-export const MASS_TYPES = ["SIMPLES", "SOLENE", "PALAVRA"] as const;
-export type MassType = (typeof MASS_TYPES)[number];
+export type MassType = string;
 
 export type AttendanceEntry = {
   userId: Types.ObjectId;
@@ -33,6 +32,7 @@ export type EventEntry = {
 
 export type MassDocument = {
   _id: Types.ObjectId;
+  name?: string;
   status: MassStatus;
   massType: MassType;
   scheduledAt: Date;
@@ -107,9 +107,9 @@ const buildMassSchema = (mongoose: ReturnType<typeof getMongoose>) => {
         default: "SCHEDULED",
         required: true,
       },
+      name: { type: String, trim: true, default: "" },
       massType: {
         type: String,
-        enum: MASS_TYPES,
         required: true,
       },
       scheduledAt: { type: Date, required: true },

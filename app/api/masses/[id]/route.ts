@@ -18,7 +18,7 @@ export async function GET(req: Request, context: RouteContext) {
   const requestId = getRequestId(req);
 
   try {
-    await requireAuth(req);
+    const auth = await requireAuth(req);
     await dbConnect();
 
     const { id } = await context.params;
@@ -36,7 +36,7 @@ export async function GET(req: Request, context: RouteContext) {
     const confirmedEntries = mass.attendance?.confirmed ?? [];
     const pendingEntries = mass.attendance?.pending ?? [];
     const assignments = mass.assignments ?? [];
-    const events = mass.events ?? [];
+    const events = auth.role === "CERIMONIARIO" ? mass.events ?? [] : [];
 
     const userNameMap = await getUserNameMapByIds([
       mass.createdBy,
@@ -51,6 +51,7 @@ export async function GET(req: Request, context: RouteContext) {
     return jsonOk(
       {
         id: mass._id.toString(),
+        name: mass.name ?? "",
         status: mass.status,
         massType: mass.massType,
         scheduledAt: mass.scheduledAt,

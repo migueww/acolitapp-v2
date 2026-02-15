@@ -2,6 +2,7 @@ import type { MassDocument } from "@/models/Mass";
 
 export const serializeMass = (mass: MassDocument) => ({
   id: mass._id.toString(),
+  name: mass.name ?? "",
   status: mass.status,
   massType: mass.massType,
   scheduledAt: mass.scheduledAt,

@@ -1,6 +1,7 @@
 import dbConnect from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { getMongoose } from "@/lib/mongoose";
+import { getLiturgyRoleModel } from "@/models/LiturgyRole";
 import { getUserModel } from "@/models/User";
 import { assignRolesMassAction } from "@/src/domain/mass/actions";
 import { serializeMass } from "@/src/domain/mass/serializers";
@@ -8,6 +9,7 @@ import { ApiError, toHttpResponse } from "@/src/server/http/errors";
 import { getRequestId } from "@/src/server/http/request";
 import { jsonOk } from "@/src/server/http/response";
 import { logError, logInfo } from "@/src/server/http/logging";
+import { normalizeLiturgyRoleKey } from "@/src/domain/liturgy/service";
 
 export const runtime = "nodejs";
 
@@ -26,9 +28,9 @@ const normalizeAssignments = async (rawAssignments: unknown) => {
   const assignments = rawAssignments.map((assignmentRaw) => {
     const assignment = assignmentRaw as InputAssignment;
 
-    const roleKey = typeof assignment.roleKey === "string" ? assignment.roleKey.trim().toUpperCase() : "";
+    const roleKey = typeof assignment.roleKey === "string" ? normalizeLiturgyRoleKey(assignment.roleKey) : "";
     if (!roleKey) {
-      throw new ApiError({ code: "VALIDATION_ERROR", message: "roleKey inválido em assignments", status: 400 });
+      throw new ApiError({ code: "VALIDATION_ERROR", message: "roleKey invalido em assignments", status: 400 });
     }
 
     const userIdRaw = assignment.userId;
@@ -37,7 +39,7 @@ const normalizeAssignments = async (rawAssignments: unknown) => {
     }
 
     if (typeof userIdRaw !== "string" || !mongoose.Types.ObjectId.isValid(userIdRaw)) {
-      throw new ApiError({ code: "VALIDATION_ERROR", message: "userId inválido em assignments", status: 400 });
+      throw new ApiError({ code: "VALIDATION_ERROR", message: "userId invalido em assignments", status: 400 });
     }
 
     return { roleKey, userId: new mongoose.Types.ObjectId(userIdRaw) };
@@ -64,6 +66,16 @@ const normalizeAssignments = async (rawAssignments: unknown) => {
     }
   }
 
+  const roleKeys = Array.from(new Set(assignments.map((assignment) => assignment.roleKey)));
+  const validRoleKeysCount = await getLiturgyRoleModel().countDocuments({ key: { $in: roleKeys } });
+  if (validRoleKeysCount !== roleKeys.length) {
+    throw new ApiError({
+      code: "VALIDATION_ERROR",
+      message: "Todas as funcoes em assignments devem existir na liturgia",
+      status: 400,
+    });
+  }
+
   return assignments;
 };
 
@@ -83,7 +95,8 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 
     return jsonOk({ ok: true, mass: serializeMass(mass) }, requestId);
   } catch (error) {
-    logError(requestId, "Erro ao atribuir funções da missa", error);
+    logError(requestId, "Erro ao atribuir funcoes da missa", error);
     return toHttpResponse(error, requestId);
   }
 }
+

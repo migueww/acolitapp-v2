@@ -9,7 +9,9 @@ export type UserDocument = {
   username: string;
   passwordHash: string;
   role: UserRole;
+  lastRoleKey?: string | null;
   active: boolean;
+  globalScore: number;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -28,7 +30,9 @@ const buildUserSchema = (mongoose: ReturnType<typeof getMongoose>) =>
         default: "ACOLITO",
         required: true,
       },
+      lastRoleKey: { type: String, default: null, trim: true },
       active: { type: Boolean, default: true, required: true },
+      globalScore: { type: Number, default: 50, min: 0, max: 100, required: true },
     },
     { timestamps: true }
   );

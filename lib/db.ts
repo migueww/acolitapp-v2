@@ -13,7 +13,7 @@ if (!MONGODB_URI) {
 }
 
 const MONGODB_URI_SAFE = MONGODB_URI;
-const DNS_SERVERS = (process.env.DNS_SERVERS ?? "8.8.8.8,1.1.1.1")
+const DNS_SERVERS = (process.env.DNS_SERVERS ?? "")
   .split(",")
   .map((server) => server.trim())
   .filter(Boolean);

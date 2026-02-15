@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { jwtVerify, SignJWT } from "jose";
+import { ApiError } from "@/src/server/http/errors";
 
 export type UserRole = "CERIMONIARIO" | "ACOLITO";
 
@@ -89,7 +90,7 @@ export async function requireAuth(request: Request): Promise<AuthUser> {
   const auth = await getAuth(request);
 
   if (!auth) {
-    throw new Error("Não autorizado");
+    throw new ApiError({ code: "UNAUTHENTICATED", message: "Nao autorizado", status: 401 });
   }
 
   return auth;
@@ -99,7 +100,7 @@ export async function requireCerimoniario(request: Request): Promise<AuthUser> {
   const auth = await requireAuth(request);
 
   if (auth.role !== "CERIMONIARIO") {
-    throw new Error("Acesso negado");
+    throw new ApiError({ code: "FORBIDDEN", message: "Acesso negado", status: 403 });
   }
 
   return auth;
@@ -124,3 +125,4 @@ export const sessionCookieOptions = {
 };
 
 export { resolveJwtSecret, SESSION_COOKIE_NAME };
+

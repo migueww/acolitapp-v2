@@ -68,7 +68,7 @@ export async function GET(req: Request) {
       .sort({ scheduledAt: 1 })
       .skip(skip)
       .limit(limit)
-      .select("_id status massType scheduledAt chiefBy createdBy")
+      .select("_id name status massType scheduledAt chiefBy createdBy")
       .lean();
     const userNameMap = await getUserNameMapByIds(
       masses.flatMap((mass) => [mass.createdBy, mass.chiefBy])
@@ -78,6 +78,7 @@ export async function GET(req: Request) {
       {
         items: masses.map((mass) => ({
           id: mass._id.toString(),
+          name: mass.name ?? "",
           status: mass.status,
           massType: mass.massType,
           scheduledAt: mass.scheduledAt,

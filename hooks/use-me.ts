@@ -4,7 +4,14 @@ import * as React from "react";
 
 import { ApiClientError, apiFetch } from "@/lib/api";
 
-type MeResponse = { id: string; role: "CERIMONIARIO" | "ACOLITO"; name: string };
+type MeResponse = {
+  id: string;
+  role: "CERIMONIARIO" | "ACOLITO";
+  name: string;
+  username: string;
+  active: boolean;
+  globalScore: number;
+};
 
 type UseMeResult =
   | { status: "loading"; me: null; error: null }

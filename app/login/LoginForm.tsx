@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { ThemeToggleDropdown } from "@/components/theme-toggle";
+import { ThemeModeDropdown } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -37,7 +37,7 @@ export default function LoginForm() {
         return;
       }
 
-      router.replace("/masses");
+      router.replace("/dashboard");
       router.refresh();
     } catch {
       setMessage("Erro ao autenticar");
@@ -49,7 +49,7 @@ export default function LoginForm() {
   return (
     <div className="grid grid-rows-[0px_1fr_0px] items-center justify-items-center min-h-screen gap-16 font-[family-name:var(--font-geist-sans)]">
       <main className="flex flex-col gap-2 row-start-2 items-center sm:items-start">
-        <ThemeToggleDropdown />
+        <ThemeModeDropdown />
         <Card className="mx-auto max-w-sm">
           <CardHeader>
             <CardTitle className="text-2xl">Login</CardTitle>
@@ -86,9 +86,6 @@ export default function LoginForm() {
               <Button onClick={handleLogin} type="button" className="w-full" disabled={loading}>
                 {loading ? "Entrando..." : "Login"}
               </Button>
-            </div>
-            <div className="mt-4 text-center text-sm">
-              Cadastro público desabilitado. Solicite acesso a um CERIMONIARIO.
             </div>
             {message && <p className="mt-4 text-sm text-destructive">{message}</p>}
           </CardContent>
